@@ -1,0 +1,50 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.40629.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "zt_moco_loader", "zt_moco_loader\zt_moco_loader.vcxproj", "{00001252-5DB7-779F-2066-35AD0000698D}"
+	ProjectSection(ProjectDependencies) = postProject
+		{00002EA9-3AF7-3E12-3E8F-77D700004A22} = {00002EA9-3AF7-3E12-3E8F-77D700004A22}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "zt_moco_dll", "zt_moco_dll\zt_moco_dll.vcxproj", "{00002EA9-3AF7-3E12-3E8F-77D700004A22}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "zt_moco", "zt_moco\zt_moco.vcxproj", "{000031B1-2D52-5441-12BC-451100002E3F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Debug|x64 = Debug|x64
+		Release|Win32 = Release|Win32
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{00001252-5DB7-779F-2066-35AD0000698D}.Debug|Win32.ActiveCfg = Debug|Win32
+		{00001252-5DB7-779F-2066-35AD0000698D}.Debug|Win32.Build.0 = Debug|Win32
+		{00001252-5DB7-779F-2066-35AD0000698D}.Debug|x64.ActiveCfg = Debug|x64
+		{00001252-5DB7-779F-2066-35AD0000698D}.Debug|x64.Build.0 = Debug|x64
+		{00001252-5DB7-779F-2066-35AD0000698D}.Release|Win32.ActiveCfg = Release|Win32
+		{00001252-5DB7-779F-2066-35AD0000698D}.Release|Win32.Build.0 = Release|Win32
+		{00001252-5DB7-779F-2066-35AD0000698D}.Release|x64.ActiveCfg = Release|x64
+		{00001252-5DB7-779F-2066-35AD0000698D}.Release|x64.Build.0 = Release|x64
+		{00002EA9-3AF7-3E12-3E8F-77D700004A22}.Debug|Win32.ActiveCfg = Debug|Win32
+		{00002EA9-3AF7-3E12-3E8F-77D700004A22}.Debug|Win32.Build.0 = Debug|Win32
+		{00002EA9-3AF7-3E12-3E8F-77D700004A22}.Debug|x64.ActiveCfg = Debug|x64
+		{00002EA9-3AF7-3E12-3E8F-77D700004A22}.Debug|x64.Build.0 = Debug|x64
+		{00002EA9-3AF7-3E12-3E8F-77D700004A22}.Release|Win32.ActiveCfg = Release|Win32
+		{00002EA9-3AF7-3E12-3E8F-77D700004A22}.Release|Win32.Build.0 = Release|Win32
+		{00002EA9-3AF7-3E12-3E8F-77D700004A22}.Release|x64.ActiveCfg = Release|x64
+		{00002EA9-3AF7-3E12-3E8F-77D700004A22}.Release|x64.Build.0 = Release|x64
+		{000031B1-2D52-5441-12BC-451100002E3F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{000031B1-2D52-5441-12BC-451100002E3F}.Debug|Win32.Build.0 = Debug|Win32
+		{000031B1-2D52-5441-12BC-451100002E3F}.Debug|x64.ActiveCfg = Debug|x64
+		{000031B1-2D52-5441-12BC-451100002E3F}.Debug|x64.Build.0 = Debug|x64
+		{000031B1-2D52-5441-12BC-451100002E3F}.Release|Win32.ActiveCfg = Release|Win32
+		{000031B1-2D52-5441-12BC-451100002E3F}.Release|Win32.Build.0 = Release|Win32
+		{000031B1-2D52-5441-12BC-451100002E3F}.Release|x64.ActiveCfg = Release|x64
+		{000031B1-2D52-5441-12BC-451100002E3F}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
