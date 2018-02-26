@@ -124,11 +124,24 @@ struct GameSceneMain
 	ztScene                       *scene;
 	ztLight                        scene_light;
 	ztCameraControllerArcball      camera_controller;
-	ztModel                        models[128];
-	int                            models_used;
 	ztLight                        lights[9];
 	int                            lights_used;
 
+	ztModel                        models[256];
+	int                            models_used;
+	ztBone                         bones[128];
+	int                            bones_used;
+
+	ztModel                       *root_model;
+	ztModel                       *active_model;
+
+	ztModelEditWidget              model_edit_widget;
+
+	ztVec3                         mouse_ray_pos;
+	ztVec3                         mouse_ray_dir;
+
+	ztShaderID                     shader_pbr;
+	ztShaderID                     shader_lit_shadow;
 };
 
 // ================================================================================================================================================================================================

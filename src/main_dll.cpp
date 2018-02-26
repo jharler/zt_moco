@@ -45,7 +45,7 @@ ztInternal void _gameSceneCleanup(ztGame *game)
 
 ZT_DLLEXPORT bool dll_settings(ztGameDetails* details, ztGameSettings* settings)
 {
-	settings->memory   = zt_gigabytes(1);
+	settings->memory   = zt_megabytes(256);
 #if 0
 	settings->native_w = settings->screen_w = 1920;
 	settings->native_h = settings->screen_h = 1080;
@@ -144,8 +144,8 @@ ZT_DLLEXPORT bool dll_init(ztGameDetails* details, ztGameSettings* settings, voi
 		game->texture_random = zt_textureMakeRandom(&random, 4, 4);
 
 		ztShaderTonemapSettings tonemap_settings = {};
-		tonemap_settings.bloom_enabled = true;
-		tonemap_settings.ao_enabled = true;
+		tonemap_settings.bloom_enabled = false;
+		tonemap_settings.ao_enabled = false;
 
 		game->shader_hdr_tonemap = zt_shaderBuildTonemap(&tonemap_settings);
 		game->shader_hdr_bright = zt_shaderGetDefault(ztShaderDefault_Bright);
@@ -301,10 +301,10 @@ ZT_DLLEXPORT bool dll_unload(void *memory)
 
 void gameAdjustCamera(ztGame *game)
 {
-	r32 view_distance = 50;
+	r32 view_distance = 150;
 	zt_cameraMakePersp(&game->camera_3d, game->settings->screen_w, game->settings->screen_h, zt_degreesToRadians(60), 0.1f, view_distance, game->camera_3d.position, game->camera_3d.rotation);
 	zt_cameraRecalcMatrices(&game->camera_3d);
-	_gameCreateRenderTargets(game, false);
+	_gameCreateRenderTargets(game, true);
 }
 
 // ================================================================================================================================================================================================
@@ -315,6 +315,8 @@ ZT_DLLEXPORT void dll_screenChange(ztGameSettings *settings, void *memory)
 	zt_cameraMakeOrtho(&game->camera_2d, settings->screen_w, settings->screen_h, settings->native_w, settings->native_h, 0.1f, 100.f, game->camera_2d.position);
 	zt_cameraRecalcMatrices(&game->camera_2d);
 	gameAdjustCamera(game);
+
+	game->screen_updated = true;
 }
 
 // ================================================================================================================================================================================================
@@ -573,6 +575,7 @@ ZT_DLLEXPORT bool dll_gameLoop(void *memory, r32 dt)
 		}
 	}
 #	endif
+	game->screen_updated = false;
 	return true;
 }
 

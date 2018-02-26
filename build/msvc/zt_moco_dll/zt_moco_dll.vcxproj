@@ -19,7 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\src\moco.cpp" />
+    <None Include="..\..\..\src\moco.cpp" />
+    <None Include="..\..\..\src\moco_gui.cpp" />
     <ClCompile Include="..\..\..\src\unity_dll.cpp" />
     <None Include="..\..\..\src\main_dll.cpp" />
     <None Include="..\..\..\src\game.h" />
@@ -40,7 +41,8 @@
     <ClInclude Include="..\..\..\..\ZeroTolerance\zt_game_gui.h" />
     <ClInclude Include="..\..\..\..\ZeroTolerance\zt_opengl.h" />
     <ClInclude Include="..\..\..\..\ZeroTolerance\zt_tools.h" />
-    <ClInclude Include="..\..\..\src\moco.h" />
+    <None Include="..\..\..\src\moco_gui.h" />
+    <None Include="..\..\..\src\moco.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{00002EA9-3AF7-3E12-3E8F-77D700004A22}</ProjectGuid>
@@ -125,6 +127,7 @@
       <SubSystem>Windows</SubSystem>
       <OutputFile>$(OutDir)zt_moco$(TargetExt)</OutputFile>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -141,6 +144,7 @@
       <SubSystem>Windows</SubSystem>
       <OutputFile>$(OutDir)zt_moco$(TargetExt)</OutputFile>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+      <AdditionalDependencies>assimp-vc120-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">

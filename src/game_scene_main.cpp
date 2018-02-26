@@ -7,6 +7,8 @@
 // headers ========================================================================================================================================================================================
 
 #include "game.h"
+#include "moco.h"
+#include "moco_gui.h"
 
 // variables ======================================================================================================================================================================================
 
@@ -18,7 +20,7 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 	{
 		case GameSceneMainLoad_Scene: {
 			if (gs->load.load_info[idx].state == ztLoadState_Query) {
-				gs->load.load_info[idx].total_steps  = 2;
+				gs->load.load_info[idx].total_steps  = 3;
 				gs->load.load_info[idx].current_step = 0;
 				gs->load.load_info[idx].state        = ztLoadState_Loading;
 			}
@@ -31,7 +33,13 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 						gs->scene = zt_sceneMake(zt_memGetGlobalArena());
 						{
 							ztShaderPhysicallyBasedRenderingSettings settings = {};
-							ztShaderID shader_pbr = zt_shaderMakePhysicallyBasedRendering(&settings);
+							settings.support_bones = true;
+							settings.max_bones = 128;
+							//ztShaderID shader_pbr = zt_shaderMakePhysicallyBasedRendering(&settings);
+							ztShaderID shader_pbr = zt_shaderMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "shaders/shader_pbr.zts"));
+
+							gs->shader_pbr = shader_pbr;
+							gs->shader_lit_shadow = zt_shaderGetDefault(ztShaderDefault_LitShadow);
 
 							// environment maps
 							{
@@ -49,31 +57,7 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 								gs->scene->tex_brdf_lut = zt_textureMakeBidirectionalReflectanceDistributionFunctionLUT(512, 512);
 							}
 
-							// models
-							{
-								ztMaterial statue_mat = zt_materialMake();
-								ztMeshID statue_mesh;
-
-								if (zt_meshLoadOBJ(&game->asset_manager, zt_assetLoad(&game->asset_manager, "models/pbr_test_statue.obj"), &statue_mesh, &statue_mat, 1, ztVec3::one * .5f) != 1) {
-									gs->load.load_info[idx].state = ztLoadState_Error;
-									break;
-								}
-
-								statue_mat = zt_materialMake(
-								zt_textureMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "models/pbr_test_statue_albedo.png"), ztTextureFlags_MipMaps), ztColor_White, ztMaterialFlags_OwnsTexture,
-								zt_textureMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "models/pbr_test_statue_metallic.png"), ztTextureFlags_MipMaps), ztColor_White, ztMaterialFlags_OwnsTexture,
-								zt_textureMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "models/pbr_test_statue_normal.png"), ztTextureFlags_MipMaps), ztMaterialFlags_OwnsTexture,
-								zt_textureMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "models/pbr_test_statue_height.png"), ztTextureFlags_MipMaps), ztMaterialFlags_OwnsTexture,
-								zt_textureMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "models/pbr_test_statue_roughness.png"), ztTextureFlags_MipMaps), ztMaterialFlags_OwnsTexture);
-
-								ztModel *statue_model = &gs->models[gs->models_used++];
-								zt_modelMakeFromMesh(statue_model, statue_mesh, &statue_mat, shader_pbr, nullptr, ztModelFlags_CastsShadows);
-								statue_model->aabb_center = ztVec3::zero;
-								statue_model->aabb_size = zt_vec3(1, .1f, 1);
-								statue_model->transform.rotation = ztQuat::makeFromEuler(0, 180, 0);
-								zt_sceneAddModel(gs->scene, statue_model);
-							}
-							{
+							if (false) {
 								ztMaterial floor_mat = zt_materialMake();
 								ztMeshID floor_panel = zt_meshMakePrimitivePlane(3, 3, 3, 3);
 
@@ -91,22 +75,26 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 								floor_model->transform.position.y = .01f;
 								zt_sceneAddModel(gs->scene, floor_model);
 							}
-
-							// lights
-							{
-								ztLight *light = &gs->lights[gs->lights_used++];
-								*light = zt_lightMakeDirectional(zt_vec3(3, 10, 3), ztVec3::zero, 1, 0.25f);
-								zt_sceneAddLight(gs->scene, light);
-
-								light = &gs->lights[gs->lights_used++];
-								*light = zt_lightMakeArea(zt_vec3(-3, 5, -3), 1.f, true, ztColor_Cyan);
-								zt_sceneAddLight(gs->scene, light);
-							}
 						}
+						// lights
+						{
+							ztLight *light = &gs->lights[gs->lights_used++];
+							*light = zt_lightMakeDirectional(zt_vec3(30, 100, 30), ztVec3::zero, 1, 0.25f);
+							zt_sceneAddLight(gs->scene, light);
+
+							//light = &gs->lights[gs->lights_used++];
+							//*light = zt_lightMakeArea(zt_vec3(-3, 5, -3), 1.f, true, ztColor_Cyan);
+							//zt_sceneAddLight(gs->scene, light);
+						}
+
 						game->camera_3d.rotation = CAM_START_ROT;
 						game->camera_3d.position = CAM_START_POS;
 						gs->camera_controller = zt_cameraControllerMakeArcball(&game->camera_3d);
 					} break;
+
+					case 1: {
+						mocoGuiCreateToolbar(game);
+					}
 
 					default: {
 						gs->load.load_info[idx].state = ztLoadState_Complete;
@@ -258,6 +246,51 @@ FUNC_GAME_SCENE_CLEANUP(gameSceneMainCleanup)
 }
 
 // ================================================================================================================================================================================================
+// ================================================================================================================================================================================================
+
+ztInternal ztModel *_gsm_modelUnderCursor(ztGame *game, GameSceneMain *gs)
+{
+	if (gs->root_model == nullptr) {
+		return nullptr;
+	}
+
+	struct Models
+	{
+		static void findAllCollisions(ztModel *model, ztVec3 ray_pos, ztVec3 ray_dir, ztModel **collisions, int collisions_size, int *collisions_idx)
+		{
+			ztVec3 aabb_center, aabb_size;
+			zt_modelGetAABB(model, &aabb_center, &aabb_size);
+
+			zt_bitRemove(model->flags, ztModelFlags_DebugDrawAABB);
+
+			if (zt_collisionRayInAABB(ray_pos, ray_dir, aabb_center, aabb_size)) {
+				if (*collisions_idx < collisions_size) {
+					collisions[(*collisions_idx)++] = model;
+				}
+			}
+
+			zt_flink(child, model->first_child) {
+				findAllCollisions(child, ray_pos, ray_dir, collisions, collisions_size, collisions_idx);
+			}
+		}
+	};
+
+	ztModel *collisions[64];
+	int collisions_count = 0;
+
+	Models::findAllCollisions(gs->root_model, gs->mouse_ray_pos, gs->mouse_ray_dir, collisions, zt_elementsOf(collisions), &collisions_count);
+
+	zt_fiz(collisions_count) {
+		collisions[i]->flags |= ztModelFlags_DebugDrawAABB;
+	}
+
+	return collisions_count > 0 ? collisions[0] : nullptr;
+
+}
+
+// ================================================================================================================================================================================================
+// ================================================================================================================================================================================================
+
 
 FUNC_GAME_SCENE_UPDATE(gameSceneMainUpdate)
 {
@@ -269,13 +302,31 @@ FUNC_GAME_SCENE_UPDATE(gameSceneMainUpdate)
 		// put special debugging stuff here
 	}
 
-	if (input_keys[ztInputKeys_Escape].justPressed()) {
-		game->camera_3d.rotation = CAM_START_ROT;
-		game->camera_3d.position = CAM_START_POS;
-		gs->camera_controller = zt_cameraControllerMakeArcball(&game->camera_3d);
-	}
+	zt_cameraPerspGetMouseRay(&game->camera_3d, input_mouse->screen_x, input_mouse->screen_y, &gs->mouse_ray_pos, &gs->mouse_ray_dir);
+	//_gsm_modelUnderCursor(game, gs);
 
-	zt_cameraControlUpdateArcball(&gs->camera_controller, input_mouse, input_keys, dt);
+
+	if (!gui_input) {
+		if (input_keys[ztInputKeys_Escape].justPressed()) {
+			game->camera_3d.rotation = CAM_START_ROT;
+			game->camera_3d.position = CAM_START_POS;
+			gs->camera_controller = zt_cameraControllerMakeArcball(&game->camera_3d);
+		}
+
+		if (input_keys[ztInputKeys_T].justPressed()) {
+			zt_modelEditWidgetChangeMode(&gs->model_edit_widget, ztModelEditWidgetMode_Translate);
+		}
+		if (input_keys[ztInputKeys_R].justPressed()) {
+			zt_modelEditWidgetChangeMode(&gs->model_edit_widget, ztModelEditWidgetMode_Rotate);
+		}
+		if (input_keys[ztInputKeys_S].justPressed()) {
+			zt_modelEditWidgetChangeMode(&gs->model_edit_widget, ztModelEditWidgetMode_Scale);
+		}
+
+		zt_modelEditWidgetUpdate(&gs->model_edit_widget, input_keys, input_mouse, &game->camera_3d, dt);
+
+		zt_cameraControlUpdateArcball(&gs->camera_controller, input_mouse, input_keys, dt, ztCameraControllaerArcballUpdateFlags_IgnoreKeys);
+	}
 
 	return true;
 }
@@ -302,13 +353,109 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 		{
 			zt_drawListPushShader(&game->draw_list, zt_shaderGetDefault(ztShaderDefault_Unlit));
 			zt_drawListPushTexture(&game->draw_list, ztTextureDefault);
-
 			zt_drawListAddAxis(&game->draw_list, .0075f, game->camera_3d.position + game->camera_3d.direction * .125f);
 			zt_drawListAddFloorGrid(&game->draw_list, ztVec3::zero, 10, 10);
 			zt_drawListPopTexture(&game->draw_list);
 			zt_drawListPopShader(&game->draw_list);
 
+			struct Models
+			{
+				static void renderBones(ztDrawList *draw_list, ztModel *model, ztBone *bone)
+				{
+					zt_drawListPushTransform(draw_list, model->calculated_mat * bone->mat_offset * bone->mat_model);
+					zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Red : ztColor_Cyan);
+					zt_drawListAddEmptySimpleSphere(draw_list, ztVec3::zero, .125f, 16);
+
+					ztVec3 end_pos;
+
+					if (bone->first_child != nullptr && bone->first_child->next == nullptr) {
+						end_pos = bone->first_child->transform.position * 1.f;
+					}
+					else {
+						end_pos = zt_vec3(0, .5f, 0);
+					}
+
+					zt_drawListAddLine(draw_list, ztVec3::zero, end_pos);
+					zt_drawListPopColor(draw_list);
+
+					zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Purple : ztColor_Green);
+					zt_drawListAddEmptySimpleSphere(draw_list, end_pos, .05f, 8);
+					zt_drawListPopColor(draw_list);
+					zt_drawListPopTransform(draw_list);
+
+//					zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Purple : ztColor_Green);
+//					zt_drawListAddEmptyCubeFromCenterSize(draw_list, model->calculated_mat.getMultiply(bone->mat_model.getInverse().getMultiply(ztVec3::zero)), zt_vec3(.25f, .25f, .25f));
+//					zt_drawListPopColor(draw_list);
+
+					zt_flink(child, bone->first_child) {
+						renderBones(draw_list, model, child);
+					}
+				}
+
+				static void renderBones(ztDrawList *draw_list, ztModel *model)
+				{
+					if (model->bones_count) {
+						renderBones(draw_list, model, &model->bones[model->bones_root_idx]);
+					}
+
+					zt_flink(child, model->first_child) {
+						renderBones(draw_list, child);
+					}
+				}
+
+				static void renderBoundingBoxes(ztDrawList *draw_list, ztModel *model)
+				{
+					//if (zt_bitIsSet(model->flags, ztModelFlags_DebugDrawAABB)) {
+					ztColor color = zt_bitIsSet(model->flags, ztModelFlags_DebugDrawAABB) ? ztColor_Red : ztColor_White;
+
+					ztVec3 aabb_pos, aabb_size;
+					zt_modelGetAABB(model, &aabb_pos, &aabb_size);
+
+					ztTransform transform = zt_transformFromMat4(&model->calculated_mat);
+
+					zt_drawListPushColor(draw_list, color);
+					zt_drawListAddEmptyCubeFromCenterSize(draw_list, aabb_pos, aabb_size);
+					zt_drawListPopColor(draw_list);
+					//}
+
+					zt_flink(child, model->first_child) {
+						renderBoundingBoxes(draw_list, child);
+					}
+				}
+			};
+
+			if (gs->root_model) {
+				Models::renderBoundingBoxes(&game->draw_list, gs->root_model);
+			}
+
 			zt_renderDrawList(&game->camera_3d, &game->draw_list, ztVec4::zero, ztRenderDrawListFlags_NoClear);
+
+			if (gs->root_model) {
+				zt_rendererClearDepth();
+				zt_drawListPushShader(&game->draw_list, zt_shaderGetDefault(ztShaderDefault_Unlit));
+				zt_drawListPushTexture(&game->draw_list, ztTextureDefault);
+
+				if (gs->root_model) {
+					Models::renderBones(&game->draw_list, gs->root_model);
+				}
+
+				zt_modelEditWidgetRender(&gs->model_edit_widget, &game->camera_3d, &game->draw_list);
+
+				zt_drawListPopTexture(&game->draw_list);
+				zt_drawListPopShader(&game->draw_list);
+
+				zt_renderDrawList(&game->camera_3d, &game->draw_list, ztVec4::zero, ztRenderDrawListFlags_NoClear);
+
+				zt_drawListPushShader(&game->draw_list, zt_shaderGetDefault(ztShaderDefault_Unlit));
+				zt_drawListPushTexture(&game->draw_list, ztTextureDefault);
+
+				zt_modelEditWidgetRenderText(&gs->model_edit_widget, &game->camera_3d, &game->camera_2d, ztFontDefault, zt_vec2(0, -1.5f), &game->draw_list);
+
+				zt_drawListPopTexture(&game->draw_list);
+				zt_drawListPopShader(&game->draw_list);
+
+				zt_renderDrawList(&game->camera_2d, &game->draw_list, ztVec4::zero, ztRenderDrawListFlags_NoClear);
+			}
 		}
 	}
 	zt_textureRenderTargetCommit(final_render_target);

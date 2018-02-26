@@ -71,25 +71,29 @@ struct ztGame
 
 	ztTextureID            render_target;
 
-ztTextureID            render_target_attach_position;
-ztTextureID            render_target_attach_normal;
+	ztTextureID            render_target_attach_position;
+	ztTextureID            render_target_attach_normal;
 
-ztTextureID            render_target_bright;
-ztTextureID            render_target_blurred;
-ztTextureID            texture_random;
-ztTextureID            render_target_ao;
+	ztTextureID            render_target_bright;
+	ztTextureID            render_target_blurred;
+	ztTextureID            texture_random;
+	ztTextureID            render_target_ao;
 
-ztShaderID             shader_hdr_tonemap;
-ztShaderID             shader_hdr_bright;
-ztShaderID             shader_hdr_bloom_blur_1;
-ztShaderID             shader_hdr_bloom_blur_2;
-ztShaderID             shader_ao;
+	ztShaderID             shader_hdr_tonemap;
+	ztShaderID             shader_hdr_bright;
+	ztShaderID             shader_hdr_bloom_blur_1;
+	ztShaderID             shader_hdr_bloom_blur_2;
+	ztShaderID             shader_ao;
 
 	r32                    fade_time;
 	r32                    fade_time_max;
 
 	ztTweenManager         tween_manager_state;
 	ztTweenManager         tween_manager_permanent;
+
+	bool                   screen_updated;
+
+	ztGuiItem             *toolbar;
 };
 
 
