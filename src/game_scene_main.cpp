@@ -12,6 +12,9 @@
 
 // variables ======================================================================================================================================================================================
 
+#define ANIM_SPEED_MIN		0
+#define ANIM_SPEED_MAX      1
+
 // private functions ==============================================================================================================================================================================
 
 ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
@@ -34,9 +37,9 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 						{
 							ztShaderPhysicallyBasedRenderingSettings settings = {};
 							settings.support_bones = true;
-							settings.max_bones = 128;
-							//ztShaderID shader_pbr = zt_shaderMakePhysicallyBasedRendering(&settings);
-							ztShaderID shader_pbr = zt_shaderMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "shaders/shader_pbr.zts"));
+							settings.max_bones = 200;
+							ztShaderID shader_pbr = zt_shaderMakePhysicallyBasedRendering(&settings);
+							//ztShaderID shader_pbr = zt_shaderMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "shaders/shader_pbr.zts"));
 
 							gs->shader_pbr = shader_pbr;
 							gs->shader_lit_shadow = zt_shaderGetDefault(ztShaderDefault_LitShadow);
@@ -90,6 +93,8 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 						game->camera_3d.rotation = CAM_START_ROT;
 						game->camera_3d.position = CAM_START_POS;
 						gs->camera_controller = zt_cameraControllerMakeArcball(&game->camera_3d);
+
+						gs->animation_speed = 1.f / ANIM_SPEED_MAX;
 					} break;
 
 					case 1: {
@@ -305,6 +310,26 @@ FUNC_GAME_SCENE_UPDATE(gameSceneMainUpdate)
 	zt_cameraPerspGetMouseRay(&game->camera_3d, input_mouse->screen_x, input_mouse->screen_y, &gs->mouse_ray_pos, &gs->mouse_ray_dir);
 	//_gsm_modelUnderCursor(game, gs);
 
+	if (gs->animator) {
+		int active_seq = gs->animation_active_sequence;
+		
+		static bool stepping = false;
+		if (input_keys[ztInputKeys_Space].justPressed()) {
+			stepping = !stepping;
+		}
+
+		if (!stepping || input_keys[ztInputKeys_Right].justPressedOrRepeated()) {
+			r32 progress_before = zt_animSequencePercentComplete(gs->animator->sequences[active_seq]);
+			if (!zt_real32Eq(progress_before, gs->animation_progress)) {
+				zt_animSequenceSetPercentComplete(gs->animator->sequences[active_seq], gs->animation_progress);
+			}
+
+			r32 anim_speed = gs->animation_speed * ANIM_SPEED_MAX;
+			zt_animControllerUpdate(&gs->animator, 1, dt * anim_speed);
+
+			gs->animation_progress = zt_animSequencePercentComplete(gs->animator->sequences[active_seq]);
+		}
+	}
 
 	if (!gui_input) {
 		if (input_keys[ztInputKeys_Escape].justPressed()) {
@@ -325,7 +350,7 @@ FUNC_GAME_SCENE_UPDATE(gameSceneMainUpdate)
 
 		zt_modelEditWidgetUpdate(&gs->model_edit_widget, input_keys, input_mouse, &game->camera_3d, dt);
 
-		zt_cameraControlUpdateArcball(&gs->camera_controller, input_mouse, input_keys, dt, ztCameraControllaerArcballUpdateFlags_IgnoreKeys);
+		zt_cameraControlUpdateArcball(&gs->camera_controller, input_mouse, input_keys, dt, ztCameraControllerArcballUpdateFlags_IgnoreKeys);
 	}
 
 	return true;
@@ -343,7 +368,7 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 	zt_sceneOptimize(gs->scene, &game->camera_3d);
 	zt_sceneLighting(gs->scene, &game->camera_3d);
 
-	zt_textureRenderTargetPrepare(final_render_target);
+	zt_textureRenderTargetPrepare(final_render_target, true);
 	{
 		zt_rendererClear(zt_vec4(.024f, .024f, .024f, 1));
 		zt_rendererSetDepthTest(true, ztRendererDepthTestFunction_LessEqual);
@@ -453,6 +478,113 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 
 				zt_drawListPopTexture(&game->draw_list);
 				zt_drawListPopShader(&game->draw_list);
+
+				ztInputMouse *input_mouse = zt_inputMouseAccessState();
+				ztVec2 mpos = zt_cameraOrthoScreenToWorld(&game->camera_2d, input_mouse->screen_x, input_mouse->screen_y);
+
+				if (gs->animator && gs->active_model && gs->active_model->bones_count > 0) {
+					ztAnimSequence *seq = gs->animator->sequences[gs->animation_active_sequence];
+
+					ztVec2 viewport = zt_cameraOrthoGetViewportSize(&game->camera_2d);
+
+					r32 time = zt_animSequenceRunTime(seq);
+					r32 length = 40.f;
+					r32 length_sca = length / time;
+
+					ztVec2 start = zt_vec2(viewport.x / -2 + 3.f, viewport.y / -2.f + 1.f);
+
+					zt_drawListPushColor(&game->draw_list, ztColor_Green);
+					zt_drawListAddLine(&game->draw_list, start - zt_vec2(0, .5f), start + zt_vec2(length, -.5f));
+					zt_drawListPopColor(&game->draw_list);
+					zt_strMakePrintf(run_time_str, 32, "%.2f", time);
+					zt_drawListAddText2D(&game->draw_list, ztFontDefault, run_time_str, start - zt_vec2(.5f, .5f), ztAlign_Right, ztAnchor_Right);
+
+					ztAnimLayer *tooltip_layer = nullptr;
+					ztAnimKey *tooltip_key = nullptr;
+
+					zt_fiz(seq->layers_count) {
+						struct local
+						{
+							static bool displayLayerDetails(ztBone *root, ztAnimLayer *layer)
+							{
+								if (layer->target.type == ztVariant_vec3) {
+									if (layer->target.v_vec3 == &root->transform.position || layer->target.v_vec3 == &root->transform.scale) {
+										return zt_bitIsSet(root->flags, MocoGuiBoneFlags_DisplayAnim);
+									}
+								}
+								else if (layer->target.type == ztVariant_quat) {
+									if (layer->target.v_quat == &root->transform.rotation) {
+										return zt_bitIsSet(root->flags, MocoGuiBoneFlags_DisplayAnim);
+									}
+								}
+
+								zt_flink(child, root->first_child) {
+									if (displayLayerDetails(child, layer)) {
+										return true;
+									}
+								}
+
+								return false;
+							}
+						};
+
+						if (!local::displayLayerDetails(&gs->active_model->bones[gs->active_model->bones_root_idx], &seq->layers[i])) {
+							continue;
+						}
+
+						r32 run_time = zt_animLayerRunTime(&seq->layers[i]);
+						r32 length_pct = run_time / time;
+
+						ztVec2 pos1 = start;
+						ztVec2 pos2 = zt_vec2(pos1.x + (length * length_pct) * zt_animLayerPercentComplete(&seq->layers[i]), pos1.y);
+						zt_drawListPushColor(&game->draw_list, ztColor_Yellow);
+						zt_drawListAddLine(&game->draw_list, pos1, pos2);
+						zt_drawListPopColor(&game->draw_list);
+
+						pos2 = zt_vec2(pos1.x + length * zt_animLayerPercentComplete(&seq->layers[i]), pos1.y);
+						zt_drawListPushColor(&game->draw_list, ztColor_Cyan);
+						zt_drawListAddLine(&game->draw_list, pos1, pos2);
+						zt_drawListPopColor(&game->draw_list);
+
+						zt_drawListAddText2D(&game->draw_list, ztFontDefault, seq->layers[i].name, pos1 - zt_vec2(.5f, 0), ztAlign_Right, ztAnchor_Right);
+
+						zt_drawListPushColor(&game->draw_list, ztColor_LightBlue);
+						r32 cur_time = 0;
+						zt_fjz(seq->layers[i].keys_count) {
+							cur_time += seq->layers[i].keys[j].time;
+							r32 cur_time_pct = cur_time / time;
+							ztVec2 kpos1 = pos1 + zt_vec2(length * cur_time_pct, -.05f);
+							ztVec2 kpos2 = kpos1 + zt_vec2(0, .1f);
+
+							zt_drawListAddLine(&game->draw_list, kpos1, kpos2);
+
+							if (zt_collisionPointInRect(mpos, kpos1 + zt_vec2(0, .05f), zt_vec2(.1f, .1f))) {
+								tooltip_layer = &seq->layers[i];
+								tooltip_key = &seq->layers[i].keys[j];
+							}
+
+						}
+						zt_drawListPopColor(&game->draw_list);
+
+						start.y += .25f;
+					}
+
+					if (tooltip_layer) {
+						ztVec2 size = zt_vec2(4.5f, 1.f);
+						ztVec2 pos = mpos + zt_vec2(size.x / 2 + .25f, 0);
+						zt_drawListAddSolidOutlinedRect2D(&game->draw_list, pos, size, ztColor_Black, ztColor_White);
+
+						char layer_info[128] = { 0 };
+						if (tooltip_layer->target.type == ztVariant_vec3) {
+							zt_strPrintf(layer_info, zt_elementsOf(layer_info), "Current: %.2f, %.2f, %.2f\nKey Frame; %.2f, %.2f, %.2f", tooltip_layer->target.v_vec3->x, tooltip_layer->target.v_vec3->y, tooltip_layer->target.v_vec3->z, tooltip_key->value.v_vec3.x, tooltip_key->value.v_vec3.y, tooltip_key->value.v_vec3.z);
+						}
+						else if (tooltip_layer->target.type == ztVariant_quat) {
+							zt_strPrintf(layer_info, zt_elementsOf(layer_info), "Current: %.2f, %.2f, %.2f, %.2f\nKey Frame; %.2f, %.2f, %.2f, %.2f", tooltip_layer->target.v_quat->x, tooltip_layer->target.v_quat->y, tooltip_layer->target.v_quat->z, tooltip_layer->target.v_quat->w, tooltip_key->value.v_quat.x, tooltip_key->value.v_quat.y, tooltip_key->value.v_quat.z, tooltip_key->value.v_quat.w);
+						}
+
+						zt_drawListAddText2D(&game->draw_list, ztFontDefault, layer_info, pos);
+					}
+				}
 
 				zt_renderDrawList(&game->camera_2d, &game->draw_list, ztVec4::zero, ztRenderDrawListFlags_NoClear);
 			}

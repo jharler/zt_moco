@@ -45,7 +45,7 @@ ztInternal void _gameSceneCleanup(ztGame *game)
 
 ZT_DLLEXPORT bool dll_settings(ztGameDetails* details, ztGameSettings* settings)
 {
-	settings->memory   = zt_megabytes(256);
+	settings->memory   = zt_megabytes(900);
 #if 0
 	settings->native_w = settings->screen_w = 1920;
 	settings->native_h = settings->screen_h = 1080;

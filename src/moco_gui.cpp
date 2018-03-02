@@ -24,6 +24,7 @@ struct MocoGuiToolbarData
 	ztGuiItem *textures_panel;
 	ztGuiItem *bone_hierarchy_panel;
 	ztGuiItem *bone_transform_panel;
+	ztGuiItem *animation_panel;
 
 	int        active_texture;
 	ztGuiItem *buttons[5];
@@ -31,6 +32,65 @@ struct MocoGuiToolbarData
 
 
 // private functions ==============================================================================================================================================================================
+
+// ================================================================================================================================================================================================
+// ================================================================================================================================================================================================
+// ================================================================================================================================================================================================
+
+ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_animComboSelected, ZT_FUNC_GUI_COMBOBOX_ITEM_SELECTED(_mocoGuiCallback_animComboSelected))
+{
+	MocoGuiToolbarData *toolbar_data = (MocoGuiToolbarData*)user_data;
+
+	if (toolbar_data->game->game_scene_main.animator) {
+		zt_animControllerStartSequence(toolbar_data->game->game_scene_main.animator, toolbar_data->game->game_scene_main.animator->sequences_name_hash[selected], .125f);
+		toolbar_data->game->game_scene_main.animation_active_sequence = selected;
+		toolbar_data->game->game_scene_main.animation_progress = zt_animSequencePercentComplete(toolbar_data->game->game_scene_main.animator->sequences[selected]);
+	}
+}
+
+// ================================================================================================================================================================================================
+
+ztInternal void _mocoGui_createAnimWindow(MocoGuiToolbarData *toolbar_data)
+{
+	if (toolbar_data->game->game_scene_main.animator == nullptr) {
+		return;
+	}
+
+	ztGuiItem *panel = zt_guiMakeWindow("Animations", ztGuiWindowBehaviorFlags_AllowCollapse | ztGuiWindowBehaviorFlags_AllowDrag | ztGuiWindowBehaviorFlags_AllowClose | ztGuiWindowBehaviorFlags_ShowTitle | ztGuiWindowBehaviorFlags_CloseHides);
+	ztGuiItem *sizer = zt_guiMakeSizer(zt_guiWindowGetContentParent(panel), ztGuiItemOrient_Vert, true);
+	zt_guiItemSetSize(panel, zt_vec2(6.5f, 1.75f));
+	zt_guiItemSetPosition(panel, ztAlign_Left | ztAlign_Top, ztAnchor_Left | ztAnchor_Top, zt_vec2(27.f, -1.25f));
+	//zt_guiItemSetPosition(panel, ztAlign_Left | ztAlign_Top, ztAnchor_Left | ztAnchor_Top, zt_vec2(5.f, -1.25f));
+
+	r32 padding = 3 / zt_pixelsPerUnit();
+
+	ztAnimController *animator = toolbar_data->game->game_scene_main.animator;
+
+	ztGuiItem *combo = zt_guiMakeComboBox(sizer, animator->sequences_count);
+	zt_fiz(animator->sequences_count) {
+		zt_guiComboBoxAppend(combo, animator->sequences_name[i]);
+	}
+	zt_guiComboBoxSetCallback(combo, ZT_FUNCTION_POINTER_TO_VAR(_mocoGuiCallback_animComboSelected), toolbar_data);
+	zt_guiSizerAddItem(sizer, combo, 0, padding);
+
+	ztGuiItem *col_sizer = zt_guiMakeColumnSizer(sizer, 2, ztGuiColumnSizerType_FillRow);
+	zt_guiSizerAddItem(sizer, col_sizer, 1, 0);
+	zt_guiColumnSizerSetProp(col_sizer, 1, 1);
+	
+	ztGuiItem *progress_label = zt_guiMakeStaticText(sizer, "Progress:");
+	ztGuiItem *progress_slider = zt_guiMakeSlider(sizer, ztGuiItemOrient_Horz, &toolbar_data->game->game_scene_main.animation_progress);
+	zt_guiSizerAddItem(col_sizer, progress_label, 0, padding);
+	zt_guiSizerAddItem(col_sizer, progress_slider, 1, padding);
+
+	ztGuiItem *speed_label = zt_guiMakeStaticText(sizer, "Speed:");
+	ztGuiItem *speed_slider = zt_guiMakeSlider(sizer, ztGuiItemOrient_Horz, &toolbar_data->game->game_scene_main.animation_speed);
+	zt_guiSizerAddItem(col_sizer, speed_label, 0, padding);
+	zt_guiSizerAddItem(col_sizer, speed_slider, 1, padding);
+
+	zt_guiWindowCollapse(panel, true);
+
+	toolbar_data->animation_panel = panel;
+}
 
 // ================================================================================================================================================================================================
 // ================================================================================================================================================================================================
@@ -208,13 +268,27 @@ ztInternal void _mocoGui_createTextureWindow(ztGame *game, MocoGuiToolbarData *t
 // ================================================================================================================================================================================================
 // ================================================================================================================================================================================================
 
+ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_modelCheckHide, ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_modelCheckHide))
+{
+	ztModel *model = (ztModel*)user_data;
+
+	if (zt_guiCheckboxGetValue(button)) {
+		model->flags |= ztModelFlags_Hidden;
+	}
+	else {
+		zt_bitRemove(model->flags, ztModelFlags_Hidden);
+	}
+}
+
+// ================================================================================================================================================================================================
+
 ztInternal void _mocoGui_createTransformWindow(MocoGuiToolbarData *toolbar_data, ztModel *model)
 {
 	zt_strMakePrintf(title, 128, "%s - Transform", model->name == nullptr ? "(null)" : model->name);
 
 	ztGuiItem *panel = zt_guiMakeWindow(title, ztGuiWindowBehaviorFlags_AllowCollapse | ztGuiWindowBehaviorFlags_AllowDrag | ztGuiWindowBehaviorFlags_AllowClose | ztGuiWindowBehaviorFlags_ShowTitle | ztGuiWindowBehaviorFlags_CloseHides);
 	ztGuiItem *sizer = zt_guiMakeSizer(zt_guiWindowGetContentParent(panel), ztGuiItemOrient_Vert, true);
-	zt_guiItemSetSize(panel, zt_vec2(6.5f, 3.75f));
+	zt_guiItemSetSize(panel, zt_vec2(6.5f, 4.05f));
 	zt_guiItemSetPosition(panel, ztAlign_Left | ztAlign_Top, ztAnchor_Left | ztAnchor_Top, zt_vec2(5.f, -1.25f));
 
 	r32 padding = 3 / zt_pixelsPerUnit();
@@ -223,11 +297,30 @@ ztInternal void _mocoGui_createTransformWindow(MocoGuiToolbarData *toolbar_data,
 	ztGuiItem *rotation_ed = zt_guiMakeEditor(sizer, "Rotation", (ztVec4*)&model->transform.rotation, ztVec4::min, ztVec4::max, .1f, true);
 	ztGuiItem *scale_ed = zt_guiMakeEditor(sizer, "Scale", &model->transform.scale, ztVec3::min, ztVec3::max, .1f, true);
 
+	ztGuiItem *check_hide = zt_guiMakeCheckbox(sizer, "Hide Model from View");
+	zt_guiCheckboxSetValue(check_hide, zt_bitIsSet(model->flags, ztModelFlags_Hidden));
+	zt_guiButtonSetCallback(check_hide, ZT_FUNCTION_POINTER_TO_VAR(_mocoGuiCallback_modelCheckHide), model);
+
 	zt_guiSizerAddItem(sizer, position_ed, 0, padding);
 	zt_guiSizerAddItem(sizer, rotation_ed, 0, padding);
 	zt_guiSizerAddItem(sizer, scale_ed, 0, padding);
+	zt_guiSizerAddItem(sizer, check_hide, 0, padding);
 
 	toolbar_data->transform_panel = panel;
+}
+
+// ================================================================================================================================================================================================
+
+ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_boneCheckDisplayAnim, ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_boneCheckDisplayAnim))
+{
+	ztBone *bone = (ztBone*)user_data;
+
+	if (zt_guiCheckboxGetValue(button)) {
+		bone->flags |= MocoGuiBoneFlags_DisplayAnim;
+	}
+	else {
+		zt_bitRemove(bone->flags, MocoGuiBoneFlags_DisplayAnim);
+	}
 }
 
 // ================================================================================================================================================================================================
@@ -240,7 +333,7 @@ ztInternal void _mocoGui_createBoneTransformWindow(MocoGuiToolbarData *toolbar_d
 
 	ztGuiItem *panel = zt_guiMakeWindow(title, ztGuiWindowBehaviorFlags_AllowCollapse | ztGuiWindowBehaviorFlags_AllowDrag | ztGuiWindowBehaviorFlags_AllowClose | ztGuiWindowBehaviorFlags_ShowTitle | ztGuiWindowBehaviorFlags_CloseHides);
 	ztGuiItem *sizer = zt_guiMakeSizer(zt_guiWindowGetContentParent(panel), ztGuiItemOrient_Vert, true);
-	zt_guiItemSetSize(panel, zt_vec2(6.5f, 3.75f));
+	zt_guiItemSetSize(panel, zt_vec2(6.5f, 4.05f));
 	zt_guiItemSetPosition(panel, ztAlign_Right | ztAlign_Top, ztAnchor_Right | ztAnchor_Top, zt_vec2(-5.f, -1.25f));
 
 	r32 padding = 3 / zt_pixelsPerUnit();
@@ -249,9 +342,14 @@ ztInternal void _mocoGui_createBoneTransformWindow(MocoGuiToolbarData *toolbar_d
 	ztGuiItem *rotation_ed = zt_guiMakeEditor(sizer, "Rotation", (ztVec4*)&bone->transform.rotation, ztVec4::min, ztVec4::max, .1f, true);
 	ztGuiItem *scale_ed = zt_guiMakeEditor(sizer, "Scale", &bone->transform.scale, ztVec3::min, ztVec3::max, .1f, true);
 
+	ztGuiItem *check_danim = zt_guiMakeCheckbox(sizer, "Display Animation Details");
+	zt_guiCheckboxSetValue(check_danim, zt_bitIsSet(bone->flags, MocoGuiBoneFlags_DisplayAnim));
+	zt_guiButtonSetCallback(check_danim, ZT_FUNCTION_POINTER_TO_VAR(_mocoGuiCallback_boneCheckDisplayAnim), bone);
+
 	zt_guiSizerAddItem(sizer, position_ed, 0, padding);
 	zt_guiSizerAddItem(sizer, rotation_ed, 0, padding);
 	zt_guiSizerAddItem(sizer, scale_ed, 0, padding);
+	zt_guiSizerAddItem(sizer, check_danim, 0, padding);
 
 	toolbar_data->bone_transform_panel = panel;
 }
@@ -272,7 +370,7 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGui_boneHierTreeItemSelected, ZT_FUNC_GUI_TREE
 	}
 
 	zt_fiz(toolbar_data->game->game_scene_main.active_model->bones_count) {
-		toolbar_data->game->game_scene_main.active_model->bones[i].flags = 0;
+		zt_bitRemove(toolbar_data->game->game_scene_main.active_model->bones[i].flags, ztBoneFlags_DebugDrawHighlight);
 	}
 
 	ztBone *bone = (ztBone*)zt_guiTreeGetNodeUserData(tree, node_id);
@@ -498,10 +596,15 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 		return;
 	}
 
+	if (game->game_scene_main.animator) {
+		zt_animControllerFree(game->game_scene_main.animator);
+	}
+	game->game_scene_main.animator = input.animations;
+
 	if (game->game_scene_main.root_model) {
 		zt_sceneRemoveModel(game->game_scene_main.scene, game->game_scene_main.root_model);
 	}
-	
+
 	MocoGuiToolbarData *toolbar_data = (MocoGuiToolbarData*)zt_guiItemGetUserData(game->toolbar);
 	if (toolbar_data) {
 		if (toolbar_data->transform_panel) {
@@ -520,14 +623,32 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 			zt_guiItemFree(toolbar_data->bone_transform_panel);
 			toolbar_data->bone_transform_panel = nullptr;
 		}
+		if (toolbar_data->animation_panel) {
+			zt_guiItemFree(toolbar_data->animation_panel);
+			toolbar_data->animation_panel = nullptr;
+		}
 	}
 
 	if (input.root_model) {
+		input.root_model->transform.scale = ztVec3::one;
 		zt_sceneAddModel(game->game_scene_main.scene, input.root_model);
 		_mocoGui_createHierarchyWindow(game, toolbar_data, input.root_model);
+		_mocoGui_createAnimWindow(toolbar_data);
 	}
 	game->game_scene_main.root_model = input.root_model;
 	game->game_scene_main.model_edit_widget = zt_modelEditWidgetMake((ztModel*)nullptr);
+
+	if (game->game_scene_main.animator) {
+		if (game->game_scene_main.animator->sequences_count > 0) {
+			zt_animControllerStartSequence(game->game_scene_main.animator, game->game_scene_main.animator->sequences_name_hash[0], 0);
+			game->game_scene_main.animation_active_sequence = 0;
+			game->game_scene_main.animation_progress = zt_animSequencePercentComplete(game->game_scene_main.animator->sequences[0]);
+		}
+		else {
+			zt_animControllerFree(game->game_scene_main.animator);
+			game->game_scene_main.animator = nullptr;
+		}
+	}
 
 	char file_name_only[64];
 	zt_fileGetFileName(path, file_name_only, zt_elementsOf(file_name_only));

@@ -53,13 +53,12 @@ void _aiLogStreamCallback(const char* message, char* user)
 
 ztMat4 zt_mat4(aiMatrix4x4 matrix)
 {
-	//return zt_mat4(matrix.a1, matrix.a2, matrix.a3, matrix.a4, matrix.b1, matrix.b2, matrix.b3, matrix.b4, matrix.c1, matrix.c2, matrix.c3, matrix.c4, matrix.d1, matrix.d2, matrix.d3, matrix.d4);
 	return zt_mat4(matrix.a1, matrix.b1, matrix.c1, matrix.d1, matrix.a2, matrix.b2, matrix.c2, matrix.d2, matrix.a3, matrix.b3, matrix.c3, matrix.d3, matrix.a4, matrix.b4, matrix.c4, matrix.d4);
 }
 
 // ================================================================================================================================================================================================
 
-bool zt_serialWrite(ztSerial *serial, aiMatrix4x4 matrix)
+bool zt_serialWrite(ztSerial *serial, aiMatrix4x4 matrix, bool scale_to_one)
 {
 	aiVector3D position;
 	aiQuaternion rotation;
@@ -67,8 +66,9 @@ bool zt_serialWrite(ztSerial *serial, aiMatrix4x4 matrix)
 
 	matrix.Decompose(scaling, rotation, position);
 
-//	ztQuat quat = ztQuat::makeFromMat4(zt_mat4(matrix.a1, matrix.a2, matrix.a3, matrix.a4, matrix.b1, matrix.b2, matrix.b3, matrix.b4, matrix.c1, matrix.c2, matrix.c3, matrix.c4, matrix.d1, matrix.d2, matrix.d3, matrix.d4));
-//	ztQuat quat = ztQuat::makeFromMat4(zt_mat4(matrix.a1, matrix.b1, matrix.c1, matrix.d1, matrix.a2, matrix.b2, matrix.c2, matrix.d2, matrix.a3, matrix.b3, matrix.c3, matrix.d3, matrix.a4, matrix.b4, matrix.c4, matrix.d4));
+	if (scale_to_one) {
+		scaling = aiVector3D(1, 1, 1);
+	}
 
 	if (!zt_serialWrite(serial, zt_vec3(position.x, position.y, position.z)) ||
 		!zt_serialWrite(serial, zt_quat(rotation.x, rotation.y, rotation.z, rotation.w)) ||
@@ -76,10 +76,64 @@ bool zt_serialWrite(ztSerial *serial, aiMatrix4x4 matrix)
 		return false;
 	}
 
-//	return zt_serialWrite(serial, zt_mat4(matrix));
-
 	return true;
 }
+
+// ================================================================================================================================================================================================
+
+struct MocoBone
+{
+	char        name[128];
+	aiMatrix4x4 offset;
+	i32         parent_idx;
+	i32         sorted_idx;
+
+	MocoBone   *first_child;
+	MocoBone   *next;
+	MocoBone   *parent;
+};
+
+// ================================================================================================================================================================================================
+
+ztInternal int _mocoFindBoneParentIndex(const aiNode *scene_root, const aiNode *root, const char *bone_name, MocoBone *bones, int bones_size, int *bones_idx)
+{
+	zt_fiz(root->mNumChildren) {
+		if (zt_strEquals(root->mChildren[i]->mName.C_Str(), bone_name)) {
+			// find the bone index that matches the root name
+
+			zt_fjz(*bones_idx) {
+				if (zt_strEquals(bones[j].name, root->mName.C_Str())) {
+					return j;
+				}
+			}
+
+			i32 parent_idx = _mocoFindBoneParentIndex(scene_root, scene_root, root->mName.C_Str(), bones, bones_size, bones_idx);
+			if (parent_idx != -1) {
+				zt_assert(*bones_idx < bones_size);
+				int idx = (*bones_idx)++;
+				zt_strCpy(bones[idx].name, zt_elementsOf(bones[idx].name), root->mName.C_Str());
+				bones[idx].offset = bones[parent_idx].offset;
+				bones[idx].parent_idx = parent_idx;
+
+				return idx;
+			}
+
+			return -1;
+		}
+	}
+
+	// didn't find a matching child name in this node, check further down the hierarchy
+	zt_fiz(root->mNumChildren) {
+		i32 parent = _mocoFindBoneParentIndex(scene_root, root->mChildren[i], bone_name, bones, bones_size, bones_idx);
+		if (parent != -1) {
+			return parent;
+		}
+	}
+
+	return -1; // didn't find any matching bones
+}
+
+// ================================================================================================================================================================================================
 
 // functions ======================================================================================================================================================================================
 
@@ -101,17 +155,100 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 	log_stream.callback = _aiLogStreamCallback;
 	log_stream.user = nullptr;
 
-	aiAttachLogStream(&log_stream);
-	aiEnableVerboseLogging(true);
+	//aiAttachLogStream(&log_stream);
+	//aiEnableVerboseLogging(true);
 
 	const aiScene *scene = aiImportFile(file_in, aiProcessPreset_TargetRealtime_MaxQuality | aiProcess_Triangulate | aiProcess_SortByPType | aiProcess_FindDegenerates | aiProcess_FlipUVs);
 
-	aiDetachLogStream(&log_stream);
+	//aiDetachLogStream(&log_stream);
 
 	if (scene == nullptr) {
 		if (error) *error = MocoErrorType_aiImportFileFailed;
 		return false;
 	}
+
+	// populate bones
+	int       bones_size = 1024;
+	int       bones_count = 0;
+	MocoBone *bones = zt_mallocStructArray(MocoBone, bones_size);
+	MocoBone *root_bone = nullptr;
+	{
+		zt_fiz(scene->mNumMeshes) {
+			zt_fjz(scene->mMeshes[i]->mNumBones) {
+				aiBone *bone = scene->mMeshes[i]->mBones[j];
+
+				bool found = false;
+				zt_fkz(bones_count) {
+					if (zt_strEquals(bones[k].name, bone->mName.C_Str())) {
+
+						zt_assert(
+							zt_real32Close(bones[k].offset.a1, bone->mOffsetMatrix.a1) && zt_real32Close(bones[k].offset.a2, bone->mOffsetMatrix.a2) && zt_real32Close(bones[k].offset.a3, bone->mOffsetMatrix.a3) && zt_real32Close(bones[k].offset.a4, bone->mOffsetMatrix.a4) &&
+							zt_real32Close(bones[k].offset.b1, bone->mOffsetMatrix.b1) && zt_real32Close(bones[k].offset.b2, bone->mOffsetMatrix.b2) && zt_real32Close(bones[k].offset.b3, bone->mOffsetMatrix.b3) && zt_real32Close(bones[k].offset.b4, bone->mOffsetMatrix.b4) &&
+							zt_real32Close(bones[k].offset.c1, bone->mOffsetMatrix.c1) && zt_real32Close(bones[k].offset.c2, bone->mOffsetMatrix.c2) && zt_real32Close(bones[k].offset.c3, bone->mOffsetMatrix.c3) && zt_real32Close(bones[k].offset.c4, bone->mOffsetMatrix.c4) &&
+							zt_real32Close(bones[k].offset.d1, bone->mOffsetMatrix.d1) && zt_real32Close(bones[k].offset.d2, bone->mOffsetMatrix.d2) && zt_real32Close(bones[k].offset.d3, bone->mOffsetMatrix.d3) && zt_real32Close(bones[k].offset.d4, bone->mOffsetMatrix.d4));
+
+						found = true;
+						break;
+					}
+				}
+
+				if (!found) {
+					int idx = bones_count++;
+					zt_strCpy(bones[idx].name, zt_elementsOf(bones[idx].name), bone->mName.C_Str());
+					bones[idx].offset = bone->mOffsetMatrix;
+					bones[idx].parent_idx = -1;
+				}
+			}
+		}
+
+		if (bones_count) {
+			zt_fiz(bones_count) {
+				bones[i].parent_idx = _mocoFindBoneParentIndex(scene->mRootNode, scene->mRootNode, bones[i].name, bones, bones_size, &bones_count);
+			}
+
+			// need to add "Root" bone
+			zt_assert(bones_count < bones_size);
+			int root_idx = bones_count++;
+			zt_strCpy(bones[root_idx].name, zt_elementsOf(bones[root_idx].name), "Root");
+			bones[root_idx].offset = aiMatrix4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+			zt_assert(bones[root_idx].offset.IsIdentity());
+			bones[root_idx].parent_idx = -1;
+
+			// populate bone hierarchy
+			zt_fiz(bones_count - 1) {
+				if (bones[i].parent_idx == -1) {
+					bones[i].parent_idx = root_idx;
+				}
+
+				MocoBone *parent = &bones[bones[i].parent_idx];
+				MocoBone *child = &bones[i];
+				zt_singleLinkAddToEnd(parent->first_child, child);
+				child->parent = parent;
+			}
+
+			// sort everything hierarchically
+
+			struct Bones
+			{
+				static void sort(MocoBone *bone, int *sorted_bones_idx)
+				{
+					bone->sorted_idx = (*sorted_bones_idx)++;
+
+					zt_flink(child, bone->first_child) {
+						sort(child, sorted_bones_idx);
+					}
+				}
+			};
+
+			root_bone = &bones[root_idx];
+
+			int sorted_bones_idx = 0;
+			Bones::sort(root_bone, &sorted_bones_idx);
+
+			zt_assert(sorted_bones_idx == bones_count);
+		}
+	}
+
 
 	ztSerial serial;
 	if (!zt_serialMakeWriter(&serial, file_out, ZT_MODEL_FILE_IDENTIFIER, ZT_MODEL_FILE_VERSION)) {
@@ -127,6 +264,48 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 		const char *writer = "zt_moco model converter";
 		zt_serialWrite(&serial, writer, zt_strLen(writer));
 		zt_serialWrite(&serial, zt_getDate());
+	}
+	zt_serialGroupPop(&serial);
+
+	// write bone hierarchy
+	zt_serialGroupPush(&serial);
+	{
+		zt_serialGroupPush(&serial);
+		{
+			zt_serialWrite(&serial, ZT_MODEL_FILE_GUID_BONES);
+			zt_serialWrite(&serial, (i32)bones_count);
+
+			zt_serialGroupPush(&serial);
+			{
+				for (int sort_idx = 0; sort_idx < bones_count; ++sort_idx) {
+					bool found = false;
+					zt_fiz(bones_count) {
+						if (bones[i].sorted_idx == sort_idx) {
+							found = true;
+							zt_serialGroupPush(&serial);
+							{
+								zt_serialWrite(&serial, bones[i].name, zt_strLen(bones[i].name));
+								zt_serialWrite(&serial, bones[i].offset, false);
+
+								if (bones[i].parent_idx >= 0) {
+									i32 sorted_parent_idx = bones[bones[i].parent_idx].sorted_idx;
+									zt_serialWrite(&serial, sorted_parent_idx);
+								}
+								else {
+									zt_serialWrite(&serial, (i32)-1);
+								}
+							}
+							zt_serialGroupPop(&serial);
+							break;
+						}
+					}
+					zt_assert(found);
+				}
+			}
+			zt_serialGroupPop(&serial);
+
+		}
+		zt_serialGroupPop(&serial);
 	}
 	zt_serialGroupPop(&serial);
 
@@ -148,7 +327,7 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 				zt_serialWrite(&serial, mesh->mName.C_Str(), (i32)mesh->mName.length);
 				zt_serialWrite(&serial, (i32)mesh->mMaterialIndex);
 				zt_serialWrite(&serial, (i32)mesh->mNumVertices);
-				zt_serialWrite(&serial, (i32)(mesh->mTextureCoords != nullptr ? mesh->mNumVertices : 0));
+				zt_serialWrite(&serial, (i32)(mesh->mTextureCoords[0] != nullptr ? mesh->mNumVertices : 0));
 				zt_serialWrite(&serial, (i32)(mesh->mNormals != nullptr ? mesh->mNumVertices : 0));
 				zt_serialWrite(&serial, (i32)(mesh->mColors[0] != nullptr ? mesh->mNumVertices : 0));
 				zt_serialWrite(&serial, (i32)(mesh->mTangents != nullptr ? mesh->mNumVertices : 0));
@@ -162,8 +341,7 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 
 				zt_serialWrite(&serial, (i32)num_indices);
 
-				i32 num_bones = mesh->mNumBones > 0 ? mesh->mNumBones + 1 : 0;
-				zt_serialWrite(&serial, num_bones);
+				zt_serialWrite(&serial, (i32)mesh->mNumBones);
 
 				zt_serialGroupPush(&serial);
 				{
@@ -178,7 +356,7 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 					zt_serialGroupPop(&serial);
 
 					// uvs
-					if (mesh->mTextureCoords != nullptr) {
+					if (mesh->mTextureCoords[0] != nullptr) {
 						zt_serialGroupPush(&serial);
 						{
 							zt_serialWrite(&serial, ZT_MODEL_FILE_GUID_MESH_UVS);
@@ -241,84 +419,16 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 
 					// bones
 					if (mesh->mNumBones > 0) {
-						struct Bone
-						{
-							static i32 findParent(const aiScene *scene, aiMesh *mesh, aiNode *root, const char *bone_name, aiMatrix4x4 *parent_transform)
-							{
-								zt_fiz(root->mNumChildren) {
-									if (zt_strEquals(root->mChildren[i]->mName.C_Str(), bone_name)) {
-										// find the bone index that matches the root name
-										zt_fjz(mesh->mNumBones) {
-											if (zt_strEquals(mesh->mBones[j]->mName.C_Str(), root->mName.C_Str())) {
-												*parent_transform = root->mChildren[i]->mTransformation;
-												return j;
-											}
-										}
-									}
-								}
-
-								// didn't find a matching child name in this node, check further down the hierarchy
-								zt_fiz(root->mNumChildren) {
-									i32 parent = findParent(scene, mesh, root->mChildren[i], bone_name, parent_transform);
-									if (parent != -1) {
-										return parent;
-									}
-								}
-
-								return -1; // didn't find any matching bones
-							}
-						};
-
 						zt_serialGroupPush(&serial);
 						{
 							zt_serialWrite(&serial, ZT_MODEL_FILE_GUID_MESH_BONES);
 
-							zt_serialGroupPush(&serial);
-							{
-								const char *name = "Armature";
-								zt_serialWrite(&serial, name, (i32)zt_strLen(name));
-								zt_serialWrite(&serial, (i32)-1);
-								zt_serialWrite(&serial, ztVec3::zero);
-								zt_serialWrite(&serial, ztQuat::identity);
-								zt_serialWrite(&serial, ztVec3::one);
-								zt_serialWrite(&serial, ztVec3::zero);
-								zt_serialWrite(&serial, ztQuat::identity);
-								zt_serialWrite(&serial, ztVec3::one);
-								zt_serialWrite(&serial, (i32)0);
-							}
-							zt_serialGroupPop(&serial);
-
 							zt_fxz(mesh->mNumBones) {
 								aiBone *bone = mesh->mBones[x];
-								aiMatrix4x4 parent_matrix = scene->mRootNode->mTransformation;
-								i32 bone_parent_idx = Bone::findParent(scene, mesh, scene->mRootNode, bone->mName.C_Str(), &parent_matrix);
-
 								zt_serialGroupPush(&serial);
 								{
 									zt_serialWrite(&serial, bone->mName.C_Str(), (i32)bone->mName.length);
-									zt_serialWrite(&serial, bone_parent_idx + 1);
-									zt_serialWrite(&serial, parent_matrix);
-									zt_serialWrite(&serial, bone->mOffsetMatrix);
 									zt_serialWrite(&serial, (i32)bone->mNumWeights);
-
-									ztMat4 my_mat = zt_mat4(bone->mOffsetMatrix);
-									ztMat4 my_mat_inv = my_mat.getInverse();
-									aiMatrix4x4 ai_mat_inv = bone->mOffsetMatrix;
-									ai_mat_inv.Inverse();
-
-									/*
-									res.x = (pMatrix.a1 * pVector.x) + (pMatrix.a2 * pVector.y) + (pMatrix.a3 * pVector.z) + pMatrix.a4;
-									res.y = (pMatrix.b1 * pVector.x) + (pMatrix.b2 * pVector.y) + (pMatrix.b3 * pVector.z) + pMatrix.b4;
-									res.z = (pMatrix.c1 * pVector.x) + (pMatrix.c2 * pVector.y) + (pMatrix.c3 * pVector.z) + pMatrix.c4;
-									*/
-									aiVector3D bone_offset = bone->mOffsetMatrix * aiVector3D(0, 0, 0);
-									aiVector3D bone_position = ai_mat_inv * aiVector3D(0, 0, 0);
-
-									ztVec3 my_bone_offset = my_mat.getMultiply(ztVec3::zero);
-									ztVec3 my_bone_position = my_mat_inv.getMultiply(ztVec3::zero);
-
-									ztTransform my_bone_offset_tran = zt_transformFromMat4(&my_mat);
-									ztTransform m_bone_position_tran = zt_transformFromMat4(&my_mat_inv);
 
 									zt_fyz(bone->mNumWeights) {
 										zt_serialWrite(&serial, (i32)bone->mWeights[y].mVertexId);
@@ -378,7 +488,7 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 				{
 					zt_serialGroupPush(serial);
 					{
-						zt_serialWrite(serial, node->mTransformation);
+						zt_serialWrite(serial, node->mTransformation, false);
 						zt_serialWrite(serial, (i32)node->mNumMeshes);
 						//zt_serialWrite(serial, (i32)node->mNumChildren);
 						zt_serialWrite(serial, children_with_descendents);
@@ -620,14 +730,69 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 	{
 		zt_serialGroupPush(&serial);
 		{
-			zt_serialWrite(&serial, textures_idx);
+			zt_serialWrite(&serial, (i32)scene->mNumAnimations);
 		}
 		zt_serialGroupPop(&serial);
+
+		zt_fiz(scene->mNumAnimations) {
+			aiAnimation *anim = scene->mAnimations[i];
+			zt_serialGroupPush(&serial);
+			{
+				zt_serialWrite(&serial, ZT_MODEL_FILE_GUID_ANIMATION);
+
+				zt_serialWrite(&serial, anim->mName.C_Str(), (i32)anim->mName.length);
+				zt_serialWrite(&serial, anim->mDuration);
+				zt_serialWrite(&serial, (i32)anim->mTicksPerSecond);
+				zt_serialWrite(&serial, (i32)anim->mNumChannels);
+
+				zt_fjz(anim->mNumChannels) {
+					zt_serialGroupPush(&serial);
+					{
+						aiNodeAnim *anim_node = anim->mChannels[j];
+						zt_serialWrite(&serial, anim_node->mNodeName.C_Str(), anim_node->mNodeName.length);
+
+						zt_serialWrite(&serial, (i32)anim_node->mNumPositionKeys);
+						zt_fkz(anim_node->mNumPositionKeys) {
+							zt_serialGroupPush(&serial);
+							{
+								zt_serialWrite(&serial, anim_node->mPositionKeys[k].mTime);
+								zt_serialWrite(&serial, zt_vec3(anim_node->mPositionKeys[k].mValue.x, anim_node->mPositionKeys[k].mValue.y, anim_node->mPositionKeys[k].mValue.z));
+							}
+							zt_serialGroupPop(&serial);
+						}
+
+						zt_serialWrite(&serial, (i32)anim_node->mNumRotationKeys);
+						zt_fkz(anim_node->mNumRotationKeys) {
+							zt_serialGroupPush(&serial);
+							{
+								zt_serialWrite(&serial, anim_node->mRotationKeys[k].mTime);
+								zt_serialWrite(&serial, zt_quat(anim_node->mRotationKeys[k].mValue.x, anim_node->mRotationKeys[k].mValue.y, anim_node->mRotationKeys[k].mValue.z, anim_node->mRotationKeys[k].mValue.w));
+							}
+							zt_serialGroupPop(&serial);
+						}
+
+						zt_serialWrite(&serial, (i32)anim_node->mNumScalingKeys);
+						zt_fkz(anim_node->mNumScalingKeys) {
+							zt_serialGroupPush(&serial);
+							{
+								zt_serialWrite(&serial, anim_node->mScalingKeys[k].mTime);
+								zt_serialWrite(&serial, zt_vec3(anim_node->mScalingKeys[k].mValue.x, anim_node->mScalingKeys[k].mValue.y, anim_node->mScalingKeys[k].mValue.z));
+							}
+							zt_serialGroupPop(&serial);
+						}
+					}
+					zt_serialGroupPop(&serial);
+				}
+
+			}
+			zt_serialGroupPop(&serial);
+		}
 	}
 	zt_serialGroupPop(&serial);
 
-
 	zt_serialClose(&serial);
+
+	zt_free(bones);
 
 	aiReleaseImport(scene);
 	scene = nullptr;

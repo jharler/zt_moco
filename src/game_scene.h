@@ -129,8 +129,12 @@ struct GameSceneMain
 
 	ztModel                        models[256];
 	int                            models_used;
-	ztBone                         bones[128];
+	ztBone                         bones[ZT_MAX_BONES];
 	int                            bones_used;
+	ztAnimController              *animator;
+	r32                            animation_progress;
+	r32                            animation_speed;
+	int                            animation_active_sequence;
 
 	ztModel                       *root_model;
 	ztModel                       *active_model;
