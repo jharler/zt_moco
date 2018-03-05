@@ -516,8 +516,13 @@ ztInternal void _mocoGui_createHierarchyWindow(ztGame *game, MocoGuiToolbarData 
 
 		static void populate(ztGuiItem *tree, ztModel *model, ztGuiTreeNodeID node_parent)
 		{
-			char name[128];
+			char name[256];
 			zt_strCpy(name, zt_elementsOf(name), model->name == nullptr ? "(null)" : model->name);
+
+			switch (model->type) {
+				case ztModelType_Empty: zt_strCat(name, zt_elementsOf(name), " [e]"); break;
+				case ztModelType_Mesh: zt_strCat(name, zt_elementsOf(name), " [m]"); break;
+			}
 
 			ztGuiTreeNodeID node = zt_guiTreeAppend(tree, name, model, node_parent);
 
@@ -591,7 +596,7 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 	input.bones = game->game_scene_main.bones;
 	input.bones_size = zt_elementsOf(game->game_scene_main.bones);
 
-	if (!zt_modelMakeFromZtmFile(&input, temp_file, game->game_scene_main.shader_pbr, ztModelFlags_CastsShadows)) {
+	if (!zt_modelMakeFromZtmFile(&input, temp_file, game->game_scene_main.shader_lit_shadow, ztModelFlags_CastsShadows)) {
 		zt_guiDialogMessageBoxOk("Error Reading Model", "Error loading ZTM file", ZT_FUNCTION_POINTER_TO_VAR_NULL, nullptr);
 		return;
 	}

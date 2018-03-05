@@ -35,14 +35,24 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 					case 0: {
 						gs->scene = zt_sceneMake(zt_memGetGlobalArena());
 						{
-							ztShaderPhysicallyBasedRenderingSettings settings = {};
+							ztShaderStandardSettings settings = {};
+							settings.use_pbr = true;
 							settings.support_bones = true;
 							settings.max_bones = 200;
-							ztShaderID shader_pbr = zt_shaderMakePhysicallyBasedRendering(&settings);
+							ztShaderID shader_pbr = zt_shaderMakeStandard(&settings);
 							//ztShaderID shader_pbr = zt_shaderMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "shaders/shader_pbr.zts"));
 
 							gs->shader_pbr = shader_pbr;
-							gs->shader_lit_shadow = zt_shaderGetDefault(ztShaderDefault_LitShadow);
+
+							settings.use_pbr = false;
+							gs->shader_lit_shadow = zt_shaderMakeStandard(&settings);
+
+							//gs->shader_lit_shadow = zt_shaderMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "shaders/shader_standard.zts"));
+							if (gs->shader_lit_shadow == ztInvalidID) {
+								gs->load.load_info[idx].state = ztLoadState_Error;
+								break;
+							}
+
 
 							// environment maps
 							{
@@ -55,6 +65,7 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 									//if (zt_modelMakeSkybox(model_skybox, tex, true)) {
 									//	zt_sceneSetSkybox(gs->scene, model_skybox);
 									//}
+									zt_textureFree(tex);
 								}
 
 								gs->scene->tex_brdf_lut = zt_textureMakeBidirectionalReflectanceDistributionFunctionLUT(512, 512);
@@ -72,7 +83,7 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 									zt_textureMake(&game->asset_manager, zt_assetLoad(&game->asset_manager, "models/floor_panel_roughness.png"), ztTextureFlags_MipMaps), ztMaterialFlags_OwnsTexture);
 
 								ztModel *floor_model = &gs->models[gs->models_used++];
-								zt_modelMakeFromMesh(floor_model, floor_panel, &floor_mat, shader_pbr, nullptr, ztModelFlags_OwnsMaterials | ztModelFlags_OwnsMesh);
+								zt_modelMakeFromMesh(floor_model, floor_panel, &floor_mat, gs->shader_lit_shadow, nullptr, ztModelFlags_OwnsMaterials | ztModelFlags_OwnsMesh);
 								floor_model->aabb_center = ztVec3::zero;
 								floor_model->aabb_size = zt_vec3(3, .1f, 3);
 								floor_model->transform.position.y = .01f;
@@ -82,7 +93,7 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 						// lights
 						{
 							ztLight *light = &gs->lights[gs->lights_used++];
-							*light = zt_lightMakeDirectional(zt_vec3(30, 100, 30), ztVec3::zero, 1, 0.25f);
+							*light = zt_lightMakeDirectional(zt_vec3(30, 100, 30), ztVec3::zero, 1, 0.05f);
 							zt_sceneAddLight(gs->scene, light);
 
 							//light = &gs->lights[gs->lights_used++];
@@ -247,6 +258,10 @@ FUNC_GAME_SCENE_CLEANUP(gameSceneMainCleanup)
 	}
 	gs->models_used = 0;
 
+	if (gs->animator) {
+		zt_animControllerFree(gs->animator);
+	}
+
 	gs->scene = nullptr;
 }
 
@@ -387,6 +402,8 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 			{
 				static void renderBones(ztDrawList *draw_list, ztModel *model, ztBone *bone)
 				{
+					return;
+
 					zt_drawListPushTransform(draw_list, model->calculated_mat * bone->mat_offset * bone->mat_model);
 					zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Red : ztColor_Cyan);
 					zt_drawListAddEmptySimpleSphere(draw_list, ztVec3::zero, .125f, 16);
@@ -419,6 +436,8 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 
 				static void renderBones(ztDrawList *draw_list, ztModel *model)
 				{
+					return;
+
 					if (model->bones_count) {
 						renderBones(draw_list, model, &model->bones[model->bones_root_idx]);
 					}
@@ -430,6 +449,8 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 
 				static void renderBoundingBoxes(ztDrawList *draw_list, ztModel *model)
 				{
+					return;
+
 					//if (zt_bitIsSet(model->flags, ztModelFlags_DebugDrawAABB)) {
 					ztColor color = zt_bitIsSet(model->flags, ztModelFlags_DebugDrawAABB) ? ztColor_Red : ztColor_White;
 

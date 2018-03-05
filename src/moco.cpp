@@ -492,7 +492,19 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 						zt_serialWrite(serial, (i32)node->mNumMeshes);
 						//zt_serialWrite(serial, (i32)node->mNumChildren);
 						zt_serialWrite(serial, children_with_descendents);
-						zt_serialWrite(serial, node->mName.C_Str(), (i32)node->mName.length);
+
+						if (node->mName.length > 0) {
+							zt_serialWrite(serial, node->mName.C_Str(), (i32)node->mName.length);
+						}
+						else {
+							if (node->mNumMeshes == 1) {
+								aiMesh *mesh = scene->mMeshes[node->mMeshes[0]];
+								zt_serialWrite(serial, mesh->mName.C_Str(), (i32)mesh->mName.length);
+							}
+							else {
+								zt_serialWrite(serial, (char*)nullptr, 0);
+							}
+						}
 					}
 					zt_serialGroupPop(serial);
 
@@ -749,7 +761,7 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 					zt_serialGroupPush(&serial);
 					{
 						aiNodeAnim *anim_node = anim->mChannels[j];
-						zt_serialWrite(&serial, anim_node->mNodeName.C_Str(), anim_node->mNodeName.length);
+						zt_serialWrite(&serial, anim_node->mNodeName.C_Str(), (i32)anim_node->mNodeName.length);
 
 						zt_serialWrite(&serial, (i32)anim_node->mNumPositionKeys);
 						zt_fkz(anim_node->mNumPositionKeys) {

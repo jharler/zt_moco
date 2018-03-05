@@ -127,7 +127,7 @@ struct GameSceneMain
 	ztLight                        lights[9];
 	int                            lights_used;
 
-	ztModel                        models[256];
+	ztModel                        models[1024];
 	int                            models_used;
 	ztBone                         bones[ZT_MAX_BONES];
 	int                            bones_used;

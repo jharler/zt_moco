@@ -45,8 +45,8 @@ ztInternal void _gameSceneCleanup(ztGame *game)
 
 ZT_DLLEXPORT bool dll_settings(ztGameDetails* details, ztGameSettings* settings)
 {
-	settings->memory   = zt_megabytes(900);
-#if 0
+	settings->memory   = zt_megabytes(512);
+#if 1
 	settings->native_w = settings->screen_w = 1920;
 	settings->native_h = settings->screen_h = 1080;
 #else
@@ -301,7 +301,7 @@ ZT_DLLEXPORT bool dll_unload(void *memory)
 
 void gameAdjustCamera(ztGame *game)
 {
-	r32 view_distance = 150;
+	r32 view_distance = 15000;
 	zt_cameraMakePersp(&game->camera_3d, game->settings->screen_w, game->settings->screen_h, zt_degreesToRadians(60), 0.1f, view_distance, game->camera_3d.position, game->camera_3d.rotation);
 	zt_cameraRecalcMatrices(&game->camera_3d);
 	_gameCreateRenderTargets(game, true);

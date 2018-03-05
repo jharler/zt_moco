@@ -87,61 +87,9 @@ struct Uniforms
 	int       spot_lights_count;
 	mat4      bones[200];
 	int       bones_count;
-}
-
-// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-vec3 fresnelSchlick(float cos_theta, vec3 v)
-{
-	return v + (1.0 - v) * pow(1.0 - cos_theta, 3.0);
-}
-
-// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-vec3 fresnelSchlickRoughness(float cos_theta, vec3 v, float roughness)
-{
-	return v + (max(vec3(1.0 - roughness), v) - v) * pow(1.0 - cos_theta, 3.0);
-}
-
-// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-float distributionGGX(vec3 n, vec3 h, float roughness)
-{
-	float a = roughness * roughness;
-	float a2 = a * a;
-	float n_dot_h = max(dot(n, h), 0.0);
-	float n_dot_h2 = n_dot_h * n_dot_h;
-
-	float nom = a2;
-	float denom = (n_dot_h2 * (a2 - 1.0) + 1.0);
-	denom = 3.14159265359 * denom * denom;
-
-	return nom / denom;
-}
-
-// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-float geometrySchlickGGX(float n_dot_v, float roughness)
-{
-	float r = (roughness + 1.0);
-	float k = (r * r) / 8.0;
-
-	float nom = n_dot_v;
-	float denom = n_dot_v * (1.0 - k) + k;
-
-	return nom / denom;
-}
-
-// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-float geometrySmith(vec3 n, vec3 v, vec3 l, float roughness)
-{
-	float n_dot_v = max(dot(n, v), 0.0);
-	float n_dot_l = max(dot(n, l), 0.0);
-	float ggx2 = geometrySchlickGGX(n_dot_v, roughness);
-	float ggx1 = geometrySchlickGGX(n_dot_l, roughness);
-
-	return ggx1 * ggx2;
+	
+	float     shininess;
+	vec4      diffuse_color;
 }
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -158,10 +106,14 @@ vec2 parallaxMapping(vec2 uv, vec3 view_dir, Textures textures)
 vec3 normalCalculation(PixelInput _input, Textures textures)
 {
 	vec3 tangent_normal = textureSample(textures.normal_tex, _input.uv).xyz;
-	if(tangent_normal == vec3(1)) {
-		return _input.normal;
+	
+	if (tangent_normal == vec3(1)) {
+		tangent_normal = _input.normal;
+		return tangent_normal;
 	}
-	tangent_normal = tangent_normal * 2.0 - 1.0;
+	else {
+		tangent_normal = tangent_normal * 2.0 - 1.0;
+	}
 
 	vec3 Q1 = dFdx(_input.position.xyz);
 	vec3 Q2 = dFdy(_input.position.xyz);
@@ -175,6 +127,8 @@ vec3 normalCalculation(PixelInput _input, Textures textures)
 
 	return normalize(TBN * tangent_normal);
 }
+
+// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 float shadowCalculation(vec3 light_dir, vec3 normal, PixelInput _input, Textures textures)
 {
@@ -246,6 +200,7 @@ float shadowCalculationPointLight(PointLight light, textureCube depth_tex, vec3 
 }
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 float shadowCalculationSpotLight(SpotLight light, textureCube depth_tex, vec3 normal, PixelInput _input, Textures textures)
 {
 	if (light.shadowmap_use == 0) {
@@ -285,38 +240,34 @@ float shadowCalculationSpotLight(SpotLight light, textureCube depth_tex, vec3 no
 }
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+float specularCalculation(vec3 light_dir, vec3 normal, vec3 view_dir, float spec_value, float shininess)
+{
+	vec3 halfway_dir = normalize(light_dir + view_dir);
+	return pow(max(dot(normal, halfway_dir), 0.0), 256.0) * shininess * 5.0 * spec_value;
+}
+
 // ----------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 vec3 calculateLighting(vec3 light_dir, vec3 view_dir, vec3 normal, vec3 f0, vec3 light_pos, vec3 world_pos, vec3 light_color, float light_intensity, float shadow, vec3 albedo, float metallic, float roughness, bool directional)
 {
-	vec3 H = normalize(view_dir + light_dir);
-	vec3 radiance;
+	vec3 light_clr = light_color * light_intensity;
+	float diff = max(dot(light_dir, normal), 0.0);
+	vec3 diffuse = diff * light_clr;
+ 
+	float distance;
 	if (directional) {
-		float distance = 1;//normalize(light_pos);
-		float attenuation = 1.0 / (distance * distance);
-		radiance = light_color * attenuation * (1 - shadow) * light_intensity;
+		distance = 1;
 	}
 	else {
-		float distance = length(light_pos - world_pos);
-		float attenuation = 1.0 / (distance * distance);
-		radiance = light_color * attenuation * (1 - shadow) * light_intensity;
+		distance = length(light_pos - world_pos);
 	}
+	
+	float attenuation = 1.0 / (distance * distance);
+	
+	vec3 specular =specularCalculation(light_dir, normal, view_dir, metallic, roughness) * light_color;
 
-	float NDF = distributionGGX(normal, H, roughness);
-	float G   = geometrySmith(normal, view_dir, light_dir, roughness);
-	vec3  F   = fresnelSchlick(max(dot(H, view_dir), 0.0), f0);
-
-	vec3  nominator   = NDF * G * F;
-	float denominator = 4 * max(dot(normal, view_dir), 0.0) * max(dot(normal, light_dir), 0.0) + 0.001;
-	vec3  specular    = nominator / denominator;
-
-	vec3 kS = F;
-	vec3 kD = vec3(1.0) - kS;
-	kD *= 1.0 - metallic;
-
-	float NdotL = max(dot(normal, light_dir), 0.0);
-
-	return (kD * albedo / 3.14159265359 + specular) * radiance * NdotL; // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
+	return ((1.0 - shadow) * (diffuse + specular)) * albedo * attenuation;
 }
 // ----------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -342,8 +293,8 @@ program DefaultLit
 		_output.uv                   = _input.uv;
 		_output.color                = _input.color;
 		_output.frag_pos_light_space = uniforms.light_matrix * vec4(_output.frag_pos, 1.0);
-		_output.frag_pos_view = uniforms.view * model_mat * vec4(_input.position, 1);
-		_output.normal_view = mat3(uniforms.view) * mat3(model_mat) * _input.normal;
+		_output.frag_pos_view        = uniforms.view * model_mat * vec4(_input.position, 1);
+		_output.normal_view          = mat3(uniforms.view) * mat3(model_mat) * _input.normal;
 	}
 
 	// ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -353,26 +304,29 @@ program DefaultLit
 	{
 		vec3 world_pos = _input.frag_pos;
 
-		vec3 albedo = _input.color.rgb;//pow(textureSample(textures.diffuse_tex, _input.uv).rgb, vec3(2.2));
-		//vec3 albedo = textureSample(textures.diffuse_tex, _input.uv).rgb;
-		float metallic = textureSample(textures.specular_tex, _input.uv).r;
-		float roughness = textureSample(textures.roughness_tex, _input.uv).r;
-		float ao = .005;//texture(aoMap, TexCoords).r;
-
-		vec3 normal = normalCalculation(_input, textures);
 		vec3 view_dir = normalize(uniforms.view_pos - world_pos);
-		vec3 reflection = reflect(-view_dir, normal);
+		vec2 uv = parallaxMapping(_input.uv, view_dir, textures);
+		if(uv.x > 1.0 || uv.x < 0.0 || uv.y > 1.0 || uv.y < 0.0) {
+			discard();
+		}
+		
+		vec4 albedo_full = textureSample(textures.diffuse_tex, uv) * _input.color * uniforms.diffuse_color;
+		if (albedo_full.a < .1) {
+			discard();
+		}
+		vec3 albedo = albedo_full.rgb;
+		
+		vec3 normal = normalCalculation(_input, textures);
 
-		vec3 F0 = vec3(0.04);
-		F0 = lerp(F0, albedo, metallic);
+		vec3 F0 = vec3(0.04);		
+		vec3 Lo = vec3(0.00);
+		
+		float metallic = textureSample(textures.specular_tex, uv).r;
+		float roughness = uniforms.shininess;
 
-		vec3 Lo = vec3(0.0);
-
-		// directional light
 		if (true) {
 			vec3 light_dir = normalize(uniforms.light_pos);
 			float shadow = min(1 - uniforms.light_ambient, shadowCalculation(light_dir, normal, _input, textures));
-			//float shadow = shadowCalculation(light_dir, normal, _input, textures);
 			vec4 light_color = uniforms.light_color;
 			Lo += calculateLighting(light_dir, view_dir, normal, F0, uniforms.light_pos, vec3(0), light_color.rgb, uniforms.light_intensity, shadow, albedo, metallic, roughness, true);
 		}
@@ -403,33 +357,14 @@ program DefaultLit
 			}
 		}
 
-		// ambient lighting (we now use IBL as the ambient term)
-		vec3 F = fresnelSchlickRoughness(max(dot(normal, view_dir), 0.0), F0, roughness);
-
-		vec3 kS = F;
-		vec3 kD = 1.0 - kS;
-		kD *= 1.0 - metallic;
-
-		vec3 irradiance = textureSample(textures.irradiance_map_tex, normal).rgb;
-		vec3 diffuse = irradiance * albedo * uniforms.light_ambient;
-
-		// sample both the pre-filter map and the BRDF lut and combine them together as per the Split-Sum approximation to get the IBL specular part.
-		const float MAX_REFLECTION_LOD = 4.0;
-		vec3 prefilteredColor = textureSampleLOD(textures.prefilter_map_tex, reflection, roughness * MAX_REFLECTION_LOD).rgb;
-		vec2 brdf = textureSample(textures.brdf_lut_tex, vec2(max(dot(normal, view_dir), 0.0), roughness)).xy;
-		vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
-
-		vec3 ambient = (kD * diffuse + specular) * ao;
-
-		vec3 color = ambient + Lo;
-
+		vec3 color = (albedo * uniforms.light_ambient) + Lo;
+		
 		// HDR tonemapping
-		color = color / (color + vec3(1.0));
-		// gamma correct
-		color = pow(color, vec3(1.0/2.2)); 
+		//color = color / (color + vec3(1.0));
+		//// gamma correct
+		//color = pow(color, vec3(1.0/2.2)); 
 
-
-		_output.color = vec4(color, 1.0);
+		_output.color = vec4(min(color.x, 1), min(color.y, 1), min(color.z, 1), 1.0);
 		_output.position = _input.frag_pos_view;
 		_output.normal = vec4(normalize(_input.normal_view), 1);
 	}
