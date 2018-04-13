@@ -501,9 +501,13 @@ ZT_DLLEXPORT bool dll_gameLoop(void *memory, r32 dt)
 		}
 		static u32 bloom_tex_hash = zt_strHash("bloom_tex");
 		static u32 ao_tex_hash    = zt_strHash("ao_tex");
+		static u32 gamma_hash = zt_strHash("gamma");
+		static u32 exposure_hash = zt_strHash("exposure");
 
 		zt_shaderSetVariableTex  (game->shader_hdr_tonemap, bloom_tex_hash, game->render_target_blurred);
 		zt_shaderSetVariableTex  (game->shader_hdr_tonemap, ao_tex_hash,    game->render_target_ao);
+		zt_shaderSetVariableFloat(game->shader_hdr_tonemap, gamma_hash, 1.2f);
+		zt_shaderSetVariableFloat(game->shader_hdr_tonemap, exposure_hash, 8.2f);
 
 		zt_drawListAddScreenRenderTexture(&game->draw_list, game->render_target, &game->camera_2d, 1, game->shader_hdr_tonemap);
 

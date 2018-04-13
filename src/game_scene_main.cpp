@@ -34,6 +34,7 @@ ztInternal void _gameSceneMainDoLoad(ztGame *game, GameSceneMain *gs, int idx)
 				{
 					case 0: {
 						gs->scene = zt_sceneMake(zt_memGetGlobalArena());
+						gs->scene->culling_distance = 1000;
 						{
 							ztShaderStandardSettings settings = {};
 							settings.use_pbr = true;
@@ -402,7 +403,7 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 			{
 				static void renderBones(ztDrawList *draw_list, ztModel *model, ztBone *bone)
 				{
-					return;
+					//return;
 
 					zt_drawListPushTransform(draw_list, model->calculated_mat * bone->mat_offset * bone->mat_model);
 					zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Red : ztColor_Cyan);
@@ -425,9 +426,9 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 					zt_drawListPopColor(draw_list);
 					zt_drawListPopTransform(draw_list);
 
-//					zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Purple : ztColor_Green);
-//					zt_drawListAddEmptyCubeFromCenterSize(draw_list, model->calculated_mat.getMultiply(bone->mat_model.getInverse().getMultiply(ztVec3::zero)), zt_vec3(.25f, .25f, .25f));
-//					zt_drawListPopColor(draw_list);
+					//					zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Purple : ztColor_Green);
+					//					zt_drawListAddEmptyCubeFromCenterSize(draw_list, model->calculated_mat.getMultiply(bone->mat_model.getInverse().getMultiply(ztVec3::zero)), zt_vec3(.25f, .25f, .25f));
+					//					zt_drawListPopColor(draw_list);
 
 					zt_flink(child, bone->first_child) {
 						renderBones(draw_list, model, child);
@@ -436,7 +437,7 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 
 				static void renderBones(ztDrawList *draw_list, ztModel *model)
 				{
-					return;
+					//return;
 
 					if (model->bones_count) {
 						renderBones(draw_list, model, &model->bones[model->bones_root_idx]);
@@ -457,7 +458,7 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 					ztVec3 aabb_pos, aabb_size;
 					zt_modelGetAABB(model, &aabb_pos, &aabb_size);
 
-					ztTransform transform = zt_transformFromMat4(&model->calculated_mat);
+					ztTransform transform = model->calculated_transform;// zt_transformFromMat4(&model->calculated_mat);
 
 					zt_drawListPushColor(draw_list, color);
 					zt_drawListAddEmptyCubeFromCenterSize(draw_list, aabb_pos, aabb_size);
@@ -468,10 +469,27 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 						renderBoundingBoxes(draw_list, child);
 					}
 				}
+
+				static void renderOcTreeNode(ztDrawList *draw_list, ztOcTree::Node *node, int node_level)
+				{
+					ztColor colors[] = { ztColor_Cyan, ztColor_LightBlue, ztColor_Red, ztColor_Blue, ztColor_Yellow, ztColor_Purple, ztColor_White, ztColor_Orange };
+
+					if (node->objects_count > 0) {
+						zt_drawListPushColor(draw_list, colors[node_level % zt_elementsOf(colors)] * zt_vec4(1, 1, 1, .5f));
+						zt_drawListAddEmptyCubeFromCenterSize(draw_list, node->center, node->size);
+						zt_drawListPopColor(draw_list);
+					}
+
+					zt_fize(node->nodes) {
+						if (node->nodes[i] != nullptr) {
+							renderOcTreeNode(draw_list, node->nodes[i], node_level + 1);
+						}
+					}
+				}
 			};
 
 			if (gs->root_model) {
-				Models::renderBoundingBoxes(&game->draw_list, gs->root_model);
+				//Models::renderBoundingBoxes(&game->draw_list, gs->root_model);
 			}
 
 			zt_renderDrawList(&game->camera_3d, &game->draw_list, ztVec4::zero, ztRenderDrawListFlags_NoClear);
@@ -481,11 +499,22 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 				zt_drawListPushShader(&game->draw_list, zt_shaderGetDefault(ztShaderDefault_Unlit));
 				zt_drawListPushTexture(&game->draw_list, ztTextureDefault);
 
-				if (gs->root_model) {
-					Models::renderBones(&game->draw_list, gs->root_model);
-				}
+				Models::renderBones(&game->draw_list, gs->root_model);
 
 				zt_modelEditWidgetRender(&gs->model_edit_widget, &game->camera_3d, &game->draw_list);
+
+
+				//if (gs->vertices_count > 0) {
+				//	zt_drawListPushColor(&game->draw_list, ztColor_Purple);
+				//	zt_fiz(gs->vertices_count) {
+				//		zt_drawListAddPoint(&game->draw_list, gs->vertices[i]);
+				//	}
+				//	zt_drawListPopColor(&game->draw_list);
+				//}
+				//
+				//if (gs->octtree.root_node) {
+				//	Models::renderOcTreeNode(&game->draw_list, gs->octtree.root_node, 0);
+				//}
 
 				zt_drawListPopTexture(&game->draw_list);
 				zt_drawListPopShader(&game->draw_list);

@@ -144,7 +144,7 @@ int mocoGetErrorMessage(MocoErrorType_Enum error_type, char *buffer, int buffer_
 
 // ================================================================================================================================================================================================
 
-bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_Enum *error)
+bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const char *file_out, MocoErrorType_Enum *error)
 {
 	if (!zt_fileExists(file_in)) {
 		if (error) *error = MocoErrorType_InputFileNotFound;
@@ -166,6 +166,8 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 		if (error) *error = MocoErrorType_aiImportFileFailed;
 		return false;
 	}
+
+	bool needs_transform = options && options->root_transform != ztMat4::identity;
 
 	// populate bones
 	int       bones_size = 1024;
@@ -471,7 +473,7 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 					zt_real32Eq(node->mTransformation.a4, 0) && zt_real32Eq(node->mTransformation.b4, 0) && zt_real32Eq(node->mTransformation.c4, 0) && zt_real32Eq(node->mTransformation.d4, 1));
 			}
 
-			static bool serialize(ztSerial *serial, aiNode *node, const aiScene *scene)
+			static bool serialize(ztSerial *serial, aiNode *node, const aiScene *scene, bool needs_transform, MocoConvertOptions *options)
 			{
 				i32 children_with_descendents = 0;
 				zt_fiz(node->mNumChildren) {
@@ -488,7 +490,32 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 				{
 					zt_serialGroupPush(serial);
 					{
-						zt_serialWrite(serial, node->mTransformation, false);
+						if (needs_transform) {
+							//ztMat4 node_offset = zt_mat4(node->mTransformation);
+							//ztMat4 final_offset = options->root_transform * node_offset;
+							//ztTransform final_offset_transform = zt_transformFromMat4(&final_offset);
+							//zt_serialWrite(serial, final_offset_transform.position);
+							//zt_serialWrite(serial, final_offset_transform.rotation);// *ztQuat::makeFromEuler(0, 0, 180));
+							//zt_serialWrite(serial, final_offset_transform.scale);
+
+							//	return zt_mat4(matrix.a1, matrix.b1, matrix.c1, matrix.d1, matrix.a2, matrix.b2, matrix.c2, matrix.d2, matrix.a3, matrix.b3, matrix.c3, matrix.d3, matrix.a4, matrix.b4, matrix.c4, matrix.d4);
+
+							ztTransform test = zt_transformFromMat4(&options->root_transform);
+
+							//options->root_transform.transpose();
+
+							aiMatrix4x4 root_matrix(options->root_transform.c0r0, options->root_transform.c1r0, options->root_transform.c2r0, options->root_transform.c3r0, 
+													options->root_transform.c0r1, options->root_transform.c1r1, options->root_transform.c2r1, options->root_transform.c3r1,
+													options->root_transform.c0r2, options->root_transform.c1r2, options->root_transform.c2r2, options->root_transform.c3r2,
+													options->root_transform.c0r3, options->root_transform.c1r3, options->root_transform.c2r3, options->root_transform.c3r3);
+
+							aiMatrix4x4 final_matrix = root_matrix;// node->mTransformation;
+							zt_serialWrite(serial, final_matrix, false);
+						}
+						else {
+							zt_serialWrite(serial, node->mTransformation, false);
+						}
+
 						zt_serialWrite(serial, (i32)node->mNumMeshes);
 						//zt_serialWrite(serial, (i32)node->mNumChildren);
 						zt_serialWrite(serial, children_with_descendents);
@@ -524,7 +551,7 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 					{
 						zt_fiz(node->mNumChildren) {
 							if (countMeshesInDescendents(node->mChildren[i]) > 0) {
-								serialize(serial, node->mChildren[i], scene);
+								serialize(serial, node->mChildren[i], scene, false, nullptr);
 							}
 						}
 					}
@@ -545,12 +572,12 @@ bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_En
 		}
 
 		if (root_children_with_meshes > 1 || !Node::nodeTransformationIsIdentity(scene->mRootNode)) {
-			Node::serialize(&serial, scene->mRootNode, scene);
+			Node::serialize(&serial, scene->mRootNode, scene, needs_transform, options);
 		}
 		else {
 			zt_fiz(scene->mRootNode->mNumChildren) {
 				if (Node::countMeshesInDescendents(scene->mRootNode->mChildren[i]) > 0) {
-					Node::serialize(&serial, scene->mRootNode->mChildren[i], scene);
+					Node::serialize(&serial, scene->mRootNode->mChildren[i], scene, needs_transform, options);
 					break;
 				}
 			}

@@ -139,6 +139,10 @@ struct GameSceneMain
 	ztModel                       *root_model;
 	ztModel                       *active_model;
 
+	ztVec3                        *vertices;
+	i32                            vertices_count;
+	ztOcTree                       octtree;
+
 	ztModelEditWidget              model_edit_widget;
 
 	ztVec3                         mouse_ray_pos;

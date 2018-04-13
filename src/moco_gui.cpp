@@ -9,6 +9,9 @@
 #define ZT_GAME_GUI_INTERNAL_DECLARATIONS
 #include "moco_gui.h"
 
+
+
+
 // variables ======================================================================================================================================================================================
 
 struct MocoGuiToolbarData
@@ -109,30 +112,58 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadTextureDialog, ZT_FUNC_GUI_DIA
 		return;
 	}
 
-	struct Textures
-	{
-		static void replace(i32 idx, ztTextureID *to_replace, ztTextureID replace_with, MocoGuiToolbarData *toolbar_data)
+	if (toolbar_data->game->game_scene_main.active_model->type == ztModelType_Empty) {
+		struct Textures
 		{
-			if (*to_replace != ztInvalidID) {
-				zt_textureFree(*to_replace);
-				toolbar_data->buttons[idx]->button.icon->tex = replace_with;
-			}
-			else {
-				zt_guiButtonSetIcon(toolbar_data->buttons[idx], &zt_spriteMake(replace_with, zt_vec2i(0, 0), zt_textureGetSize(replace_with)));
-				toolbar_data->buttons[idx]->button.icon->half_size = ztVec2::one;
-				zt_guiItemSetSize(toolbar_data->buttons[idx], zt_vec2(2.25f, 2.75f));
-			}
-			*to_replace = replace_with;
-		}
-	};
+			static void replace(ztModel *model, i32 idx, ztTextureID replace_with, MocoGuiToolbarData *toolbar_data)
+			{
+				switch (idx)
+				{
+					case 0: model->material.diffuse_tex = replace_with; break;
+					case 1: model->material.specular_tex = replace_with; break;
+					case 2: model->material.normal_tex = replace_with; break;
+					case 3: model->material.height_tex = replace_with; break;
+					case 4: model->material.roughness_tex = replace_with; break;
+				}
 
-	switch (toolbar_data->active_texture)
-	{
-		case 0: Textures::replace(0, &toolbar_data->game->game_scene_main.active_model->material.diffuse_tex, tex_id, toolbar_data); break;
-		case 1: Textures::replace(1, &toolbar_data->game->game_scene_main.active_model->material.specular_tex, tex_id, toolbar_data); break;
-		case 2: Textures::replace(2, &toolbar_data->game->game_scene_main.active_model->material.normal_tex, tex_id, toolbar_data); break;
-		case 3: Textures::replace(3, &toolbar_data->game->game_scene_main.active_model->material.height_tex, tex_id, toolbar_data); break;
-		case 4: Textures::replace(4, &toolbar_data->game->game_scene_main.active_model->material.roughness_tex, tex_id, toolbar_data); break;
+				zt_flink(child, model->first_child) {
+					replace(child, idx, replace_with, toolbar_data);
+				}
+			}
+		};
+
+		zt_guiButtonSetIcon(toolbar_data->buttons[toolbar_data->active_texture], &zt_spriteMake(tex_id, zt_vec2i(0, 0), zt_textureGetSize(tex_id)));
+		toolbar_data->buttons[toolbar_data->active_texture]->button.icon->half_size = ztVec2::one;
+		zt_guiItemSetSize(toolbar_data->buttons[toolbar_data->active_texture], zt_vec2(2.25f, 2.75f));
+
+		Textures::replace(toolbar_data->game->game_scene_main.active_model, toolbar_data->active_texture, tex_id, toolbar_data);
+	}
+	else {
+		struct Textures
+		{
+			static void replace(i32 idx, ztTextureID *to_replace, ztTextureID replace_with, MocoGuiToolbarData *toolbar_data)
+			{
+				if (*to_replace != ztInvalidID) {
+					zt_textureFree(*to_replace);
+					toolbar_data->buttons[idx]->button.icon->tex = replace_with;
+				}
+				else {
+					zt_guiButtonSetIcon(toolbar_data->buttons[idx], &zt_spriteMake(replace_with, zt_vec2i(0, 0), zt_textureGetSize(replace_with)));
+					toolbar_data->buttons[idx]->button.icon->half_size = ztVec2::one;
+					zt_guiItemSetSize(toolbar_data->buttons[idx], zt_vec2(2.25f, 2.75f));
+				}
+				*to_replace = replace_with;
+			}
+		};
+
+		switch (toolbar_data->active_texture)
+		{
+			case 0: Textures::replace(0, &toolbar_data->game->game_scene_main.active_model->material.diffuse_tex, tex_id, toolbar_data); break;
+			case 1: Textures::replace(1, &toolbar_data->game->game_scene_main.active_model->material.specular_tex, tex_id, toolbar_data); break;
+			case 2: Textures::replace(2, &toolbar_data->game->game_scene_main.active_model->material.normal_tex, tex_id, toolbar_data); break;
+			case 3: Textures::replace(3, &toolbar_data->game->game_scene_main.active_model->material.height_tex, tex_id, toolbar_data); break;
+			case 4: Textures::replace(4, &toolbar_data->game->game_scene_main.active_model->material.roughness_tex, tex_id, toolbar_data); break;
+		}
 	}
 }
 
@@ -567,6 +598,48 @@ ztInternal const char *_mocoGui_getTempFileName(ztGame *game)
 
 // ================================================================================================================================================================================================
 
+ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_exportFileDialog, ZT_FUNC_GUI_DIALOG_FILE_SELECTED(_mocoGuiCallback_exportFileDialog))
+{
+	zt_assert(zt_fileExists(path));
+
+	ztGame *game = (ztGame*)user_data;
+	MocoGuiToolbarData *toolbar_data = (MocoGuiToolbarData*)zt_guiItemGetUserData(game->toolbar);
+
+	MocoConvertOptions options = {};
+	if (game->game_scene_main.root_model) {
+		options.root_transform = game->game_scene_main.root_model->calculated_mat;
+	}
+
+	if (zt_fileExists(path)) {
+		zt_fileDelete(path);
+	}
+
+	MocoErrorType_Enum error = MocoErrorType_Success;
+	if (!mocoConvertFile(&options, toolbar_data->file_name, path, &error)) {
+		char error_msg[1024];
+		mocoGetErrorMessage(error, error_msg, zt_elementsOf(error_msg));
+		zt_guiDialogMessageBoxOk("Error Converting Model", error_msg, ZT_FUNCTION_POINTER_TO_VAR_NULL, nullptr);
+		return;
+	}
+
+	zt_strMakePrintf(message, ztFileMaxPath, "File exported:\n%s", path);
+	zt_guiDialogMessageBoxOk("File Successfully Exported", message, ZT_FUNCTION_POINTER_TO_VAR_NULL, nullptr);
+}
+
+// ================================================================================================================================================================================================
+
+ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadPanelButtonExport, ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_loadPanelButtonExport))
+{
+	ztGame *game = (ztGame*)user_data;
+
+	char path[ztFileMaxPath];
+	zt_fileConcatFileToPath(path, ztFileMaxPath, game->details->data_path, "models");
+
+	zt_guiDialogFileSelect("Export Model File", ztGuiDialogFileSelectFlags_Save, ZT_FUNCTION_POINTER_TO_VAR(_mocoGuiCallback_exportFileDialog), game, path);
+}
+
+// ================================================================================================================================================================================================
+
 ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG_FILE_SELECTED(_mocoGuiCallback_loadFileDialog))
 {
 	zt_assert(zt_fileExists(path));
@@ -580,7 +653,8 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 		zt_fileDelete(temp_file);
 	}
 
-	if (!mocoConvertFile(path, temp_file, &error)) {
+	MocoConvertOptions options = {};
+	if (!mocoConvertFile(&options, path, temp_file, &error)) {
 		char error_msg[1024];
 		mocoGetErrorMessage(error, error_msg, zt_elementsOf(error_msg));
 		zt_guiDialogMessageBoxOk("Error Converting Model", error_msg, ZT_FUNCTION_POINTER_TO_VAR_NULL, nullptr);
@@ -635,8 +709,9 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 	}
 
 	if (input.root_model) {
-		input.root_model->transform.scale = ztVec3::one;
+		//input.root_model->transform.scale = ztVec3::one;
 		zt_sceneAddModel(game->game_scene_main.scene, input.root_model);
+		game->game_scene_main.models_used = input.models_used;
 		_mocoGui_createHierarchyWindow(game, toolbar_data, input.root_model);
 		_mocoGui_createAnimWindow(toolbar_data);
 	}
@@ -664,6 +739,28 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 
 	zt_strCpy(toolbar_data->file_name, zt_elementsOf(toolbar_data->file_name), path);
 
+
+	if (false && input.root_model) {
+		i32 verts_needed = zt_modelGetVertices(input.root_model, nullptr, 0, ztModelGetVerticesTransform_WorldTransform);
+		if (verts_needed > 0) {
+			ztVec3 *vertices = zt_mallocStructArray(ztVec3, verts_needed);
+			i32 vertices_count = zt_modelGetVertices(input.root_model, vertices, verts_needed, ztModelGetVerticesTransform_WorldTransform);
+
+			game->game_scene_main.vertices = vertices;
+			game->game_scene_main.vertices_count = vertices_count;
+
+			ztVec3 aabb_center, aabb_size;
+			zt_modelGetAABB(input.root_model, &aabb_center, &aabb_size);
+			
+			ztOcTreeItemContainedTestVerticesData test_data;
+			test_data.vertices_count = vertices_count;
+			test_data.vertices = vertices;
+			
+			zt_ocTreeMake(&game->game_scene_main.octtree, 512, 16, aabb_center, aabb_size, zt_ocTreeItemContainedTestVertices, &test_data);
+
+//			zt_free(vertices);
+		}
+	}
 }
 
 // ================================================================================================================================================================================================
@@ -691,6 +788,10 @@ ztInternal ztGuiItem *_mocoGui_createLoadPanel(ztGame *game, ztGuiItem *parent, 
 	ztGuiItem *load_button = zt_guiMakeButton(sizer, "Load Model File");
 	zt_guiButtonSetCallback(load_button, ZT_FUNCTION_POINTER_TO_VAR(_mocoGuiCallback_loadPanelButton), game);
 	zt_guiSizerAddItem(sizer, load_button, 0, padding);
+
+	ztGuiItem *export_button = zt_guiMakeButton(sizer, "Export To ZTM");
+	zt_guiButtonSetCallback(export_button, ZT_FUNCTION_POINTER_TO_VAR(_mocoGuiCallback_loadPanelButtonExport), game);
+	zt_guiSizerAddItem(sizer, export_button, 0, padding);
 
 	ztGuiItem *file_name_label = zt_guiMakeStaticText(sizer, "", ztGuiStaticTextBehaviorFlags_Fancy, 64);
 	zt_guiSizerAddItem(sizer, file_name_label, 0, padding, ztAlign_Left|ztAlign_VertCenter);

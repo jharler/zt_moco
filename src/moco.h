@@ -26,13 +26,18 @@ enum MocoErrorType_Enum
 
 // structs/classes ================================================================================================================================================================================
 
+struct MocoConvertOptions
+{
+	ztMat4 root_transform = ztMat4::identity;
+};
+
 // external variables =============================================================================================================================================================================
 
 // function prototypes ============================================================================================================================================================================
 
 int mocoGetErrorMessage(MocoErrorType_Enum error_type, char *buffer, int buffer_size);
 
-bool mocoConvertFile(const char *file_in, const char *file_out, MocoErrorType_Enum *error);
+bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const char *file_out, MocoErrorType_Enum *error);
 
 
 // inline functions ===============================================================================================================================================================================
