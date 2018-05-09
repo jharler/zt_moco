@@ -94,6 +94,9 @@ struct ztGame
 	bool                   screen_updated;
 
 	ztGuiItem             *toolbar;
+
+	char                   last_path_import[ztFileMaxPath];
+	char                   last_path_export[ztFileMaxPath];
 };
 
 

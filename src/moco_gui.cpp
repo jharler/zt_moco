@@ -610,6 +610,8 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_exportFileDialog, ZT_FUNC_GUI_DIAL
 		options.root_transform = game->game_scene_main.root_model->calculated_mat;
 	}
 
+	zt_fileGetFullPath(path, game->last_path_export, ztFileMaxPath);
+
 	if (zt_fileExists(path)) {
 		zt_fileDelete(path);
 	}
@@ -633,7 +635,14 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadPanelButtonExport, ZT_FUNC_GUI
 	ztGame *game = (ztGame*)user_data;
 
 	char path[ztFileMaxPath];
-	zt_fileConcatFileToPath(path, ztFileMaxPath, game->details->data_path, "models");
+
+	if (game->last_path_export[0] == 0) {
+		zt_fileConcatFileToPath(path, ztFileMaxPath, game->details->data_path, "models");
+	}
+	else {
+		zt_strCpy(path, ztFileMaxPath, game->last_path_export);
+	}
+
 
 	zt_guiDialogFileSelect("Export Model File", ztGuiDialogFileSelectFlags_Save, ZT_FUNCTION_POINTER_TO_VAR(_mocoGuiCallback_exportFileDialog), game, path);
 }
@@ -652,6 +661,8 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 	if (zt_fileExists(temp_file)) {
 		zt_fileDelete(temp_file);
 	}
+
+	zt_fileGetFullPath(path, game->last_path_import, ztFileMaxPath);
 
 	MocoConvertOptions options = {};
 	if (!mocoConvertFile(&options, path, temp_file, &error)) {
@@ -770,7 +781,14 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadPanelButton, ZT_FUNC_GUI_BUTTO
 	ztGame *game = (ztGame*)user_data;
 
 	char path[ztFileMaxPath];
-	zt_fileConcatFileToPath(path, ztFileMaxPath, game->details->data_path, "models");
+
+	if (game->last_path_import[0] == 0) {
+		zt_fileConcatFileToPath(path, ztFileMaxPath, game->details->data_path, "models");
+	}
+	else {
+		zt_strCpy(path, ztFileMaxPath, game->last_path_import);
+	}
+
 
 	zt_guiDialogFileSelect("Choose Model File", ztGuiDialogFileSelectFlags_Open, ZT_FUNCTION_POINTER_TO_VAR(_mocoGuiCallback_loadFileDialog), game, path);
 }
