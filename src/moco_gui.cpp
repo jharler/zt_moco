@@ -325,7 +325,7 @@ ztInternal void _mocoGui_createTransformWindow(MocoGuiToolbarData *toolbar_data,
 	r32 padding = 3 / zt_pixelsPerUnit();
 
 	ztGuiItem *position_ed = zt_guiMakeEditor(sizer, "Position", &model->transform.position, ztVec3::min, ztVec3::max, .1f, true);
-	ztGuiItem *rotation_ed = zt_guiMakeEditor(sizer, "Rotation", (ztVec4*)&model->transform.rotation, ztVec4::min, ztVec4::max, .1f, true);
+	ztGuiItem *rotation_ed = zt_guiMakeEditor(sizer, "Rotation", &model->transform.rotation, ztVec3::min, ztVec3::max, 1.f, true);
 	ztGuiItem *scale_ed = zt_guiMakeEditor(sizer, "Scale", &model->transform.scale, ztVec3::min, ztVec3::max, .1f, true);
 
 	ztGuiItem *check_hide = zt_guiMakeCheckbox(sizer, "Hide Model from View");
@@ -370,7 +370,7 @@ ztInternal void _mocoGui_createBoneTransformWindow(MocoGuiToolbarData *toolbar_d
 	r32 padding = 3 / zt_pixelsPerUnit();
 
 	ztGuiItem *position_ed = zt_guiMakeEditor(sizer, "Position", &bone->transform.position, ztVec3::min, ztVec3::max, .1f, true);
-	ztGuiItem *rotation_ed = zt_guiMakeEditor(sizer, "Rotation", (ztVec4*)&bone->transform.rotation, ztVec4::min, ztVec4::max, .1f, true);
+	ztGuiItem *rotation_ed = zt_guiMakeEditor(sizer, "Rotation", &bone->transform.rotation, ztVec3::min, ztVec3::max, .1f, true);
 	ztGuiItem *scale_ed = zt_guiMakeEditor(sizer, "Scale", &bone->transform.scale, ztVec3::min, ztVec3::max, .1f, true);
 
 	ztGuiItem *check_danim = zt_guiMakeCheckbox(sizer, "Display Animation Details");
@@ -408,7 +408,7 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGui_boneHierTreeItemSelected, ZT_FUNC_GUI_TREE
 	bone->flags |= ztBoneFlags_DebugDrawHighlight;
 	_mocoGui_createBoneTransformWindow(toolbar_data, bone);
 
-	toolbar_data->game->game_scene_main.model_edit_widget = zt_modelEditWidgetMake(bone);
+	zt_modelEditWidgetMake(&toolbar_data->game->game_scene_main.model_edit_widget, bone);
 }
 
 // ================================================================================================================================================================================================
@@ -482,7 +482,7 @@ ztInternal void _mocoGui_makeModelActive(MocoGuiToolbarData *toolbar_data, ztMod
 		zt_guiItemFree(toolbar_data->transform_panel);
 		toolbar_data->transform_panel = nullptr;
 
-		toolbar_data->game->game_scene_main.model_edit_widget = zt_modelEditWidgetMake((ztModel*)nullptr);
+		zt_modelEditWidgetMake(&toolbar_data->game->game_scene_main.model_edit_widget, (ztModel*)nullptr);
 	}
 	if (toolbar_data->textures_panel != nullptr) {
 		zt_guiItemFree(toolbar_data->textures_panel);
@@ -508,7 +508,7 @@ ztInternal void _mocoGui_makeModelActive(MocoGuiToolbarData *toolbar_data, ztMod
 
 		toolbar_data->game->game_scene_main.active_model = model;
 		toolbar_data->game->game_scene_main.active_model->flags |= ztModelFlags_DebugDrawAABB;
-		toolbar_data->game->game_scene_main.model_edit_widget = zt_modelEditWidgetMake(model);
+		zt_modelEditWidgetMake(&toolbar_data->game->game_scene_main.model_edit_widget, model);
 	}
 }
 
@@ -600,15 +600,21 @@ ztInternal const char *_mocoGui_getTempFileName(ztGame *game)
 
 ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_exportFileDialog, ZT_FUNC_GUI_DIALOG_FILE_SELECTED(_mocoGuiCallback_exportFileDialog))
 {
-	zt_assert(zt_fileExists(path));
+	//zt_assert(zt_fileExists(path));
 
 	ztGame *game = (ztGame*)user_data;
 	MocoGuiToolbarData *toolbar_data = (MocoGuiToolbarData*)zt_guiItemGetUserData(game->toolbar);
 
 	MocoConvertOptions options = {};
 	if (game->game_scene_main.root_model) {
+		options.apply_root_transform = true;
 		options.root_transform = game->game_scene_main.root_model->calculated_mat;
 	}
+	else {
+		options.apply_root_transform = false;
+	}
+
+	options.from_blender = game->from_blender;
 
 	zt_fileGetFullPath(path, game->last_path_export, ztFileMaxPath);
 
@@ -665,6 +671,9 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 	zt_fileGetFullPath(path, game->last_path_import, ztFileMaxPath);
 
 	MocoConvertOptions options = {};
+	//options.apply_root_transform = true;
+	//options.from_blender = true;
+
 	if (!mocoConvertFile(&options, path, temp_file, &error)) {
 		char error_msg[1024];
 		mocoGetErrorMessage(error, error_msg, zt_elementsOf(error_msg));
@@ -689,7 +698,7 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 	if (game->game_scene_main.animator) {
 		zt_animControllerFree(game->game_scene_main.animator);
 	}
-	game->game_scene_main.animator = input.animations;
+	game->game_scene_main.animator = input.root_model->anim_controller;
 
 	if (game->game_scene_main.root_model) {
 		zt_sceneRemoveModel(game->game_scene_main.scene, game->game_scene_main.root_model);
@@ -727,7 +736,7 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 		_mocoGui_createAnimWindow(toolbar_data);
 	}
 	game->game_scene_main.root_model = input.root_model;
-	game->game_scene_main.model_edit_widget = zt_modelEditWidgetMake((ztModel*)nullptr);
+	zt_modelEditWidgetMake(&game->game_scene_main.model_edit_widget, (ztModel*)nullptr);
 
 	if (game->game_scene_main.animator) {
 		if (game->game_scene_main.animator->sequences_count > 0) {

@@ -24,7 +24,7 @@
 ztInternal const char *_mocoErrorStrings[MocoErrorType_MAX] = {
 	"No Error",
 	"Input File Not Found",
-	"Assimp ziImportFile function failed",
+	"Assimp aiImportFile function failed",
 };
 
 // private functions ==============================================================================================================================================================================
@@ -58,7 +58,7 @@ ztMat4 zt_mat4(aiMatrix4x4 matrix)
 
 // ================================================================================================================================================================================================
 
-bool zt_serialWrite(ztSerial *serial, aiMatrix4x4 matrix, bool scale_to_one)
+bool zt_serialWriteMat4(ztSerial *serial, aiMatrix4x4 matrix, bool scale_to_one, bool from_blender)
 {
 	aiVector3D position;
 	aiQuaternion rotation;
@@ -68,6 +68,12 @@ bool zt_serialWrite(ztSerial *serial, aiMatrix4x4 matrix, bool scale_to_one)
 
 	if (scale_to_one) {
 		scaling = aiVector3D(1, 1, 1);
+	}
+
+	if (from_blender) {
+		ztQuat quat = zt_quat(rotation.x, rotation.y, rotation.z, rotation.w);
+		ztVec3 euler = quat.euler();
+		rotation = aiQuaternion(zt_degreesToRadians(euler.y), zt_degreesToRadians(euler.z), zt_degreesToRadians(euler.x + 90));
 	}
 
 	if (!zt_serialWrite(serial, zt_vec3(position.x, position.y, position.z)) ||
@@ -167,13 +173,18 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 		return false;
 	}
 
-	bool needs_transform = options && options->root_transform != ztMat4::identity;
+	bool needs_transform = options && options->apply_root_transform; //options->root_transform != ztMat4::identity;
+	bool from_blender = options && options->from_blender;
 
 	// populate bones
 	int       bones_size = 1024;
 	int       bones_count = 0;
 	MocoBone *bones = zt_mallocStructArray(MocoBone, bones_size);
 	MocoBone *root_bone = nullptr;
+	MocoBone *native_root_bone = nullptr;
+
+	aiVector3D root_bone_scale_multiplier = aiVector3D(1, 1, 1);
+
 	{
 		zt_fiz(scene->mNumMeshes) {
 			zt_fjz(scene->mMeshes[i]->mNumBones) {
@@ -199,6 +210,11 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 					zt_strCpy(bones[idx].name, zt_elementsOf(bones[idx].name), bone->mName.C_Str());
 					bones[idx].offset = bone->mOffsetMatrix;
 					bones[idx].parent_idx = -1;
+
+					aiVector3D position;
+					aiQuaternion rotation;
+
+					bone->mOffsetMatrix.Decompose(root_bone_scale_multiplier, rotation, position);
 				}
 			}
 		}
@@ -214,12 +230,18 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 			zt_strCpy(bones[root_idx].name, zt_elementsOf(bones[root_idx].name), "Root");
 			bones[root_idx].offset = aiMatrix4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
 			zt_assert(bones[root_idx].offset.IsIdentity());
+
+			if (options && options->from_blender) {
+				bones[root_idx].offset = aiMatrix4x4(aiVector3D(1, 1, 1), aiQuaternion(0, 0, zt_degreesToRadians(90)), aiVector3D(0, 0, 0));
+			}
+
 			bones[root_idx].parent_idx = -1;
 
 			// populate bone hierarchy
 			zt_fiz(bones_count - 1) {
 				if (bones[i].parent_idx == -1) {
 					bones[i].parent_idx = root_idx;
+					native_root_bone = &bones[i];
 				}
 
 				MocoBone *parent = &bones[bones[i].parent_idx];
@@ -248,6 +270,14 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 			Bones::sort(root_bone, &sorted_bones_idx);
 
 			zt_assert(sorted_bones_idx == bones_count);
+		}
+	}
+
+	int meshes_to_skip = 0;
+	zt_fiz(scene->mNumMeshes) {
+		if (scene->mMeshes[i]->mPrimitiveTypes != 4) {
+			zt_logInfo("moco: skipping non-polygonal mesh (%s - %d)", scene->mMeshes[i]->mName.C_Str(), scene->mMeshes[i]->mPrimitiveTypes);
+			meshes_to_skip += 1;
 		}
 	}
 
@@ -287,7 +317,7 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 							zt_serialGroupPush(&serial);
 							{
 								zt_serialWrite(&serial, bones[i].name, zt_strLen(bones[i].name));
-								zt_serialWrite(&serial, bones[i].offset, false);
+								zt_serialWriteMat4(&serial, bones[i].offset, false, from_blender && bones[i].parent_idx >= 0);
 
 								if (bones[i].parent_idx >= 0) {
 									i32 sorted_parent_idx = bones[bones[i].parent_idx].sorted_idx;
@@ -328,6 +358,7 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 				zt_serialWrite(&serial, ZT_MODEL_FILE_GUID_MESH);
 				zt_serialWrite(&serial, mesh->mName.C_Str(), (i32)mesh->mName.length);
 				zt_serialWrite(&serial, (i32)mesh->mMaterialIndex);
+
 				zt_serialWrite(&serial, (i32)mesh->mNumVertices);
 				zt_serialWrite(&serial, (i32)(mesh->mTextureCoords[0] != nullptr ? mesh->mNumVertices : 0));
 				zt_serialWrite(&serial, (i32)(mesh->mNormals != nullptr ? mesh->mNumVertices : 0));
@@ -352,7 +383,12 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 					{
 						zt_serialWrite(&serial, ZT_MODEL_FILE_GUID_MESH_VERTICES);
 						zt_fxz(mesh->mNumVertices) {
-							zt_serialWrite(&serial, zt_vec3(mesh->mVertices[x].x, mesh->mVertices[x].y, mesh->mVertices[x].z));
+							if (from_blender) {
+								zt_serialWrite(&serial, zt_vec3(mesh->mVertices[x].x * root_bone_scale_multiplier.x, mesh->mVertices[x].z * root_bone_scale_multiplier.z, -mesh->mVertices[x].y * root_bone_scale_multiplier.y));
+							}
+							else {
+								zt_serialWrite(&serial, zt_vec3(mesh->mVertices[x].x * root_bone_scale_multiplier.x, mesh->mVertices[x].y * root_bone_scale_multiplier.y, mesh->mVertices[x].z * root_bone_scale_multiplier.z));
+							}
 						}
 					}
 					zt_serialGroupPop(&serial);
@@ -375,7 +411,16 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 						{
 							zt_serialWrite(&serial, ZT_MODEL_FILE_GUID_MESH_NORMALS);
 							zt_fxz(mesh->mNumVertices) {
-								zt_serialWrite(&serial, zt_vec3(mesh->mNormals[x].x, mesh->mNormals[x].y, mesh->mNormals[x].z));
+								if (from_blender) {
+									ztVec3 normal = zt_vec3(mesh->mNormals[x].x, mesh->mNormals[x].y, mesh->mNormals[x].z);
+									normal = ztQuat::makeFromEuler(-90, 0, 0).rotatePosition(normal);
+
+									zt_serialWrite(&serial, normal);
+									//zt_serialWrite(&serial, zt_vec3(mesh->mNormals[x].x, mesh->mNormals[x].y, mesh->mNormals[x].z));
+								}
+								else {
+									zt_serialWrite(&serial, zt_vec3(mesh->mNormals[x].x, mesh->mNormals[x].y, mesh->mNormals[x].z));
+								}
 							}
 						}
 						zt_serialGroupPop(&serial);
@@ -399,7 +444,12 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 						{
 							zt_serialWrite(&serial, ZT_MODEL_FILE_GUID_MESH_TANGENTS);
 							zt_fxz(mesh->mNumVertices) {
-								zt_serialWrite(&serial, zt_vec3(mesh->mTangents[x].x, mesh->mTangents[x].y, mesh->mTangents[x].z));
+								if (from_blender) {
+									zt_serialWrite(&serial, zt_vec3(mesh->mTangents[x].x, mesh->mTangents[x].z, mesh->mTangents[x].y));
+								}
+								else {
+									zt_serialWrite(&serial, zt_vec3(mesh->mTangents[x].x, mesh->mTangents[x].y, mesh->mTangents[x].z));
+								}
 							}
 						}
 						zt_serialGroupPop(&serial);
@@ -455,11 +505,19 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 	{
 		struct Node
 		{
-			static int countMeshesInDescendents(aiNode *node)
+			static int countMeshesInDescendents(const aiScene *scene, aiNode *node)
 			{
-				int count = node->mNumMeshes;
+				int meshes_to_skip = 0;
+				zt_fiz(node->mNumMeshes) {
+					if (scene->mMeshes[node->mMeshes[i]]->mPrimitiveTypes != 4) {
+						meshes_to_skip += 1;
+					}
+				}
+
+
+				int count = node->mNumMeshes - meshes_to_skip;
 				zt_fiz(node->mNumChildren) {
-					count += countMeshesInDescendents(node->mChildren[i]);
+					count += countMeshesInDescendents(scene, node->mChildren[i]);
 				}
 				return count;
 			}
@@ -477,7 +535,7 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 			{
 				i32 children_with_descendents = 0;
 				zt_fiz(node->mNumChildren) {
-					if (countMeshesInDescendents(node->mChildren[i]) > 0) {
+					if (countMeshesInDescendents(scene, node->mChildren[i]) > 0) {
 						children_with_descendents += 1;
 					}
 				}
@@ -510,13 +568,24 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 													options->root_transform.c0r3, options->root_transform.c1r3, options->root_transform.c2r3, options->root_transform.c3r3);
 
 							aiMatrix4x4 final_matrix = root_matrix;// node->mTransformation;
-							zt_serialWrite(serial, final_matrix, false);
+							zt_serialWriteMat4(serial, final_matrix, false, false);
 						}
 						else {
-							zt_serialWrite(serial, node->mTransformation, false);
+							zt_serialWriteMat4(serial, node->mTransformation, false, options && options->from_blender);
 						}
 
-						zt_serialWrite(serial, (i32)node->mNumMeshes);
+						int meshes_to_skip = 0;
+						aiMesh *mesh = nullptr;
+						zt_fiz(node->mNumMeshes) {
+							if (scene->mMeshes[node->mMeshes[i]]->mPrimitiveTypes != 4) {
+								meshes_to_skip += 1;
+							}
+							else {
+								mesh = scene->mMeshes[node->mMeshes[i]];
+							}
+						}
+
+						zt_serialWrite(serial, (i32)(node->mNumMeshes - meshes_to_skip));
 						//zt_serialWrite(serial, (i32)node->mNumChildren);
 						zt_serialWrite(serial, children_with_descendents);
 
@@ -529,7 +598,12 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 								zt_serialWrite(serial, mesh->mName.C_Str(), (i32)mesh->mName.length);
 							}
 							else {
-								zt_serialWrite(serial, (char*)nullptr, 0);
+								if (node->mNumMeshes - meshes_to_skip == 1 && mesh != nullptr) {
+									zt_serialWrite(serial, mesh->mName.C_Str(), (i32)mesh->mName.length);
+								}
+								else {
+									zt_serialWrite(serial, (char*)nullptr, 0);
+								}
 							}
 						}
 					}
@@ -538,6 +612,10 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 					zt_serialGroupPush(serial);
 					{
 						zt_fiz(node->mNumMeshes) {
+							if (scene->mMeshes[node->mMeshes[i]]->mPrimitiveTypes != 4) {
+								continue;
+							}
+
 							zt_serialGroupPush(serial);
 							{
 								zt_serialWrite(serial, (i32)node->mMeshes[i]);
@@ -550,7 +628,7 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 					zt_serialGroupPush(serial);
 					{
 						zt_fiz(node->mNumChildren) {
-							if (countMeshesInDescendents(node->mChildren[i]) > 0) {
+							if (countMeshesInDescendents(scene, node->mChildren[i]) > 0) {
 								serialize(serial, node->mChildren[i], scene, false, nullptr);
 							}
 						}
@@ -566,7 +644,7 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 
 		int root_children_with_meshes = 0;
 		zt_fiz(scene->mRootNode->mNumChildren) {
-			if (Node::countMeshesInDescendents(scene->mRootNode->mChildren[i]) > 0) {
+			if (Node::countMeshesInDescendents(scene, scene->mRootNode->mChildren[i]) > 0) {
 				root_children_with_meshes += 1;
 			}
 		}
@@ -576,7 +654,7 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 		}
 		else {
 			zt_fiz(scene->mRootNode->mNumChildren) {
-				if (Node::countMeshesInDescendents(scene->mRootNode->mChildren[i]) > 0) {
+				if (Node::countMeshesInDescendents(scene, scene->mRootNode->mChildren[i]) > 0) {
 					Node::serialize(&serial, scene->mRootNode->mChildren[i], scene, needs_transform, options);
 					break;
 				}
@@ -790,12 +868,30 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 						aiNodeAnim *anim_node = anim->mChannels[j];
 						zt_serialWrite(&serial, anim_node->mNodeName.C_Str(), (i32)anim_node->mNodeName.length);
 
+						bool apply_from_blender = false;
+						if (from_blender) {
+							zt_fxz(bones_count) {
+								if (zt_strEquals(bones[x].name, anim_node->mNodeName.C_Str())) {
+									if (bones[x].parent_idx >= 0 && bones[bones[x].parent_idx].parent_idx == -1) {
+										//apply_from_blender = true;
+									}
+									break;
+								}
+							}
+						}
+
 						zt_serialWrite(&serial, (i32)anim_node->mNumPositionKeys);
 						zt_fkz(anim_node->mNumPositionKeys) {
 							zt_serialGroupPush(&serial);
 							{
 								zt_serialWrite(&serial, anim_node->mPositionKeys[k].mTime);
-								zt_serialWrite(&serial, zt_vec3(anim_node->mPositionKeys[k].mValue.x, anim_node->mPositionKeys[k].mValue.y, anim_node->mPositionKeys[k].mValue.z));
+								if (apply_from_blender) {
+									zt_serialWrite(&serial, zt_vec3(anim_node->mPositionKeys[k].mValue.x, anim_node->mPositionKeys[k].mValue.z, -anim_node->mPositionKeys[k].mValue.y));
+									//zt_serialWrite(&serial, zt_vec3(anim_node->mPositionKeys[k].mValue.x, anim_node->mPositionKeys[k].mValue.y, anim_node->mPositionKeys[k].mValue.z));
+								}
+								else {
+									zt_serialWrite(&serial, zt_vec3(anim_node->mPositionKeys[k].mValue.x, anim_node->mPositionKeys[k].mValue.y, anim_node->mPositionKeys[k].mValue.z));
+								}
 							}
 							zt_serialGroupPop(&serial);
 						}
@@ -805,7 +901,17 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 							zt_serialGroupPush(&serial);
 							{
 								zt_serialWrite(&serial, anim_node->mRotationKeys[k].mTime);
-								zt_serialWrite(&serial, zt_quat(anim_node->mRotationKeys[k].mValue.x, anim_node->mRotationKeys[k].mValue.y, anim_node->mRotationKeys[k].mValue.z, anim_node->mRotationKeys[k].mValue.w));
+								ztQuat quat = zt_quat(anim_node->mRotationKeys[k].mValue.x, anim_node->mRotationKeys[k].mValue.y, anim_node->mRotationKeys[k].mValue.z, anim_node->mRotationKeys[k].mValue.w);
+								if (apply_from_blender) {
+									ztVec3 euler = quat.euler();
+									quat = ztQuat::makeFromEuler(euler.x - 90, euler.z, euler.y);
+									quat.normalize();
+									//quat = ztQuat::makeFromEuler(zt_degreesToRadians(euler.x), zt_degreesToRadians(euler.z), zt_degreesToRadians(-euler.y));
+									zt_serialWrite(&serial, quat);
+								}
+								else {
+									zt_serialWrite(&serial, quat);
+								}
 							}
 							zt_serialGroupPop(&serial);
 						}
@@ -815,7 +921,12 @@ bool mocoConvertFile(MocoConvertOptions *options, const char *file_in, const cha
 							zt_serialGroupPush(&serial);
 							{
 								zt_serialWrite(&serial, anim_node->mScalingKeys[k].mTime);
-								zt_serialWrite(&serial, zt_vec3(anim_node->mScalingKeys[k].mValue.x, anim_node->mScalingKeys[k].mValue.y, anim_node->mScalingKeys[k].mValue.z));
+								if (apply_from_blender) {
+									zt_serialWrite(&serial, zt_vec3(anim_node->mScalingKeys[k].mValue.x, anim_node->mScalingKeys[k].mValue.z, anim_node->mScalingKeys[k].mValue.y));
+								}
+								else {
+									zt_serialWrite(&serial, zt_vec3(anim_node->mScalingKeys[k].mValue.x, anim_node->mScalingKeys[k].mValue.y, anim_node->mScalingKeys[k].mValue.z));
+								}
 							}
 							zt_serialGroupPop(&serial);
 						}

@@ -94,7 +94,6 @@ ztInternal void _gameCreateRenderTargets(ztGame *game, bool free_first)
 ZT_DLLEXPORT bool dll_init(ztGameDetails* details, ztGameSettings* settings, void** game_memory)
 {
 	ztGame *game = zt_mallocStruct(ztGame);
-	*game = {};
 	*game_memory = game;
 
 	game->details     = details;
@@ -235,6 +234,68 @@ ZT_DLLEXPORT bool dll_init(ztGameDetails* details, ztGameSettings* settings, voi
 		}
 	}
 #	endif
+	
+	if (zt_cmdHasArg(details->argv, details->argc, "process-widget", "process-widget")) {
+		zt_modelEditWidgetProcessWidgetModelFile("E://Development/Projects/ZeroTolerance/local/transform_widget.ztm");
+	}
+
+	game->root_transform = zt_transformMake();
+	game->import_and_close = false;
+	if (zt_cmdHasArg(details->argv, details->argc, "s", "source") && zt_cmdHasArg(details->argv, details->argc, "o", "output")) {
+		zt_cmdGetArg(details->argv, details->argc, "s", "source", game->last_path_import, zt_elementsOf(game->last_path_import));
+		zt_cmdGetArg(details->argv, details->argc, "o", "output", game->last_path_export, zt_elementsOf(game->last_path_export));
+
+		game->import_and_close = zt_fileExists(game->last_path_import);
+	}
+
+	if (zt_cmdHasArg(details->argv, details->argc, nullptr, "position")) {
+		char value[128];
+		zt_cmdGetArg(details->argv, details->argc, nullptr, "position", value, zt_elementsOf(value));
+		ztToken tokens[3];
+		if (zt_strTokenize(value, ",", tokens, zt_elementsOf(tokens), ztStrTokenizeFlags_TrimWhitespace) == 3) {
+			game->root_transform.position.x = zt_strToReal32(value + tokens[0].beg, tokens[0].len, 0);
+			game->root_transform.position.y = zt_strToReal32(value + tokens[1].beg, tokens[1].len, 0);
+			game->root_transform.position.z = zt_strToReal32(value + tokens[2].beg, tokens[2].len, 0);
+		}
+		else {
+			zt_logCritical("invalid position parameter: %s", value);
+		}
+	}
+	if (zt_cmdHasArg(details->argv, details->argc, nullptr, "rotation")) {
+		char value[128];
+		zt_cmdGetArg(details->argv, details->argc, nullptr, "rotation", value, zt_elementsOf(value));
+		ztToken tokens[3];
+		if (zt_strTokenize(value, ",", tokens, zt_elementsOf(tokens), ztStrTokenizeFlags_TrimWhitespace) == 3) {
+			ztVec3 rotation;
+			rotation.x = zt_strToReal32(value + tokens[0].beg, tokens[0].len, 0);
+			rotation.y = zt_strToReal32(value + tokens[1].beg, tokens[1].len, 0);
+			rotation.z = zt_strToReal32(value + tokens[2].beg, tokens[2].len, 0);
+			game->root_transform.rotation = ztQuat::makeFromEuler(rotation);
+		}
+		else {
+			zt_logCritical("invalid rotation parameter: %s", value);
+		}
+	}
+	if (zt_cmdHasArg(details->argv, details->argc, nullptr, "scale")) {
+		char value[128];
+		zt_cmdGetArg(details->argv, details->argc, nullptr, "scale", value, zt_elementsOf(value));
+		ztToken tokens[3];
+		if (zt_strTokenize(value, ",", tokens, zt_elementsOf(tokens), ztStrTokenizeFlags_TrimWhitespace) == 3) {
+			game->root_transform.scale.x = zt_strToReal32(value + tokens[0].beg, tokens[0].len, 0);
+			game->root_transform.scale.y = zt_strToReal32(value + tokens[1].beg, tokens[1].len, 0);
+			game->root_transform.scale.z = zt_strToReal32(value + tokens[2].beg, tokens[2].len, 0);
+		}
+		else {
+			zt_logCritical("invalid scale parameter: %s", value);
+		}
+	}
+
+	if (zt_cmdHasArg(details->argv, details->argc, nullptr, "from_blender")) {
+		game->from_blender = true;
+	}
+	else {
+		game->from_blender = false;
+	}
 
 	return true;
 }

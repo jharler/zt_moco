@@ -97,6 +97,11 @@ struct ztGame
 
 	char                   last_path_import[ztFileMaxPath];
 	char                   last_path_export[ztFileMaxPath];
+
+	ztTransform            root_transform;
+	bool                   from_blender;
+
+	bool                   import_and_close;
 };
 
 

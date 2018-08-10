@@ -243,6 +243,26 @@ FUNC_GAME_SCENE_BEGIN(gameSceneMainBegin)
 
 	//zt_profilerPause(); // uncomment to profile startup
 
+	if (game->import_and_close) {
+		MocoConvertOptions options = {};
+		options.root_transform = zt_transformToMat4(&game->root_transform);
+		options.from_blender = game->from_blender;
+
+		if (zt_fileExists(game->last_path_export)) {
+			zt_fileDelete(game->last_path_export);
+		}
+
+		MocoErrorType_Enum error = MocoErrorType_Success;
+		if (!mocoConvertFile(&options, game->last_path_import, game->last_path_export, &error)) {
+			char error_msg[1024];
+			mocoGetErrorMessage(error, error_msg, zt_elementsOf(error_msg));
+			zt_guiDialogMessageBoxOk("Error Converting Model", error_msg, ZT_FUNCTION_POINTER_TO_VAR_NULL, nullptr);
+			return true;
+		}
+
+		return false;
+	}
+
 	return true;
 }
 
@@ -352,16 +372,6 @@ FUNC_GAME_SCENE_UPDATE(gameSceneMainUpdate)
 			game->camera_3d.rotation = CAM_START_ROT;
 			game->camera_3d.position = CAM_START_POS;
 			gs->camera_controller = zt_cameraControllerMakeArcball(&game->camera_3d);
-		}
-
-		if (input_keys[ztInputKeys_T].justPressed()) {
-			zt_modelEditWidgetChangeMode(&gs->model_edit_widget, ztModelEditWidgetMode_Translate);
-		}
-		if (input_keys[ztInputKeys_R].justPressed()) {
-			zt_modelEditWidgetChangeMode(&gs->model_edit_widget, ztModelEditWidgetMode_Rotate);
-		}
-		if (input_keys[ztInputKeys_S].justPressed()) {
-			zt_modelEditWidgetChangeMode(&gs->model_edit_widget, ztModelEditWidgetMode_Scale);
 		}
 
 		zt_modelEditWidgetUpdate(&gs->model_edit_widget, input_keys, input_mouse, &game->camera_3d, dt);

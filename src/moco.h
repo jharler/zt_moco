@@ -28,7 +28,10 @@ enum MocoErrorType_Enum
 
 struct MocoConvertOptions
 {
-	ztMat4 root_transform = ztMat4::identity;
+	bool   apply_root_transform = false;
+	ztMat4 root_transform       = ztMat4::identity;
+
+	bool  from_blender = false;
 };
 
 // external variables =============================================================================================================================================================================
