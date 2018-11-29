@@ -40,7 +40,7 @@ struct MocoGuiToolbarData
 // ================================================================================================================================================================================================
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_animComboSelected, ZT_FUNC_GUI_COMBOBOX_ITEM_SELECTED(_mocoGuiCallback_animComboSelected))
+ZT_FUNC_GUI_COMBOBOX_ITEM_SELECTED(_mocoGuiCallback_animComboSelected)
 {
 	MocoGuiToolbarData *toolbar_data = (MocoGuiToolbarData*)user_data;
 
@@ -99,7 +99,7 @@ ztInternal void _mocoGui_createAnimWindow(MocoGuiToolbarData *toolbar_data)
 // ================================================================================================================================================================================================
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadTextureDialog, ZT_FUNC_GUI_DIALOG_FILE_SELECTED(_mocoGuiCallback_loadTextureDialog))
+ZT_FUNC_GUI_DIALOG_FILE_SELECTED(_mocoGuiCallback_loadTextureDialog)
 {
 	zt_assert(zt_fileExists(path));
 
@@ -133,7 +133,8 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadTextureDialog, ZT_FUNC_GUI_DIA
 		};
 
 		zt_guiButtonSetIcon(toolbar_data->buttons[toolbar_data->active_texture], &zt_spriteMake(tex_id, zt_vec2i(0, 0), zt_textureGetSize(tex_id)));
-		toolbar_data->buttons[toolbar_data->active_texture]->button.icon->half_size = ztVec2::one;
+		ztGuiButtonState *button_state = (ztGuiButtonState*)toolbar_data->buttons[toolbar_data->active_texture]->state;
+		button_state->icon->half_size = ztVec2::one;
 		zt_guiItemSetSize(toolbar_data->buttons[toolbar_data->active_texture], zt_vec2(2.25f, 2.75f));
 
 		Textures::replace(toolbar_data->game->game_scene_main.active_model, toolbar_data->active_texture, tex_id, toolbar_data);
@@ -143,13 +144,14 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadTextureDialog, ZT_FUNC_GUI_DIA
 		{
 			static void replace(i32 idx, ztTextureID *to_replace, ztTextureID replace_with, MocoGuiToolbarData *toolbar_data)
 			{
+				ztGuiButtonState *button_state = (ztGuiButtonState*)toolbar_data->buttons[idx]->state;
 				if (*to_replace != ztInvalidID) {
 					zt_textureFree(*to_replace);
-					toolbar_data->buttons[idx]->button.icon->tex = replace_with;
+					button_state->icon->tex = replace_with;
 				}
 				else {
 					zt_guiButtonSetIcon(toolbar_data->buttons[idx], &zt_spriteMake(replace_with, zt_vec2i(0, 0), zt_textureGetSize(replace_with)));
-					toolbar_data->buttons[idx]->button.icon->half_size = ztVec2::one;
+					button_state->icon->half_size = ztVec2::one;
 					zt_guiItemSetSize(toolbar_data->buttons[idx], zt_vec2(2.25f, 2.75f));
 				}
 				*to_replace = replace_with;
@@ -169,7 +171,7 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadTextureDialog, ZT_FUNC_GUI_DIA
 
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_textureWindowPBRCheckbox, ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_textureWindowPBRCheckbox))
+ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_textureWindowPBRCheckbox)
 {
 	MocoGuiToolbarData *toolbar_data = (MocoGuiToolbarData*)user_data;
 
@@ -183,7 +185,7 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_textureWindowPBRCheckbox, ZT_FUNC_
 
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_textureWindowButton, ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_textureWindowButton))
+ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_textureWindowButton)
 {
 	MocoGuiToolbarData *toolbar_data = (MocoGuiToolbarData*)user_data;
 
@@ -270,7 +272,8 @@ ztInternal void _mocoGui_createTextureWindow(ztGame *game, MocoGuiToolbarData *t
 
 			if (texture_id != ztInvalidID) {
 				zt_guiButtonSetIcon(button, &zt_spriteMake(texture_id, zt_vec2i(0, 0), zt_textureGetSize(texture_id)));
-				button->button.icon->half_size = ztVec2::one;
+				ztGuiButtonState *button_state = (ztGuiButtonState*)button->state; 
+				button_state->icon->half_size = ztVec2::one;
 			}
 
 			zt_guiButtonSetCallback(button, ZT_FUNCTION_POINTER_TO_VAR(_mocoGuiCallback_textureWindowButton), toolbar_data);
@@ -299,7 +302,7 @@ ztInternal void _mocoGui_createTextureWindow(ztGame *game, MocoGuiToolbarData *t
 // ================================================================================================================================================================================================
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_modelCheckHide, ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_modelCheckHide))
+ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_modelCheckHide)
 {
 	ztModel *model = (ztModel*)user_data;
 
@@ -342,7 +345,7 @@ ztInternal void _mocoGui_createTransformWindow(MocoGuiToolbarData *toolbar_data,
 
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_boneCheckDisplayAnim, ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_boneCheckDisplayAnim))
+ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_boneCheckDisplayAnim)
 {
 	ztBone *bone = (ztBone*)user_data;
 
@@ -390,7 +393,7 @@ ztInternal void _mocoGui_createBoneTransformWindow(MocoGuiToolbarData *toolbar_d
 // ================================================================================================================================================================================================
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGui_boneHierTreeItemSelected, ZT_FUNC_GUI_TREE_ITEM_SELECTED(_mocoGui_boneHierTreeItemSelected))
+ZT_FUNC_GUI_TREE_ITEM_SELECTED(_mocoGui_boneHierTreeItemSelected)
 {
 	MocoGuiToolbarData *toolbar_data = (MocoGuiToolbarData*)user_data;
 	zt_assert(toolbar_data);
@@ -516,7 +519,7 @@ ztInternal void _mocoGui_makeModelActive(MocoGuiToolbarData *toolbar_data, ztMod
 // ================================================================================================================================================================================================
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGui_hierTreeItemSelected, ZT_FUNC_GUI_TREE_ITEM_SELECTED(_mocoGui_hierTreeItemSelected))
+ZT_FUNC_GUI_TREE_ITEM_SELECTED(_mocoGui_hierTreeItemSelected)
 {
 	MocoGuiToolbarData *toolbar_data = (MocoGuiToolbarData*)user_data;
 	zt_assert(toolbar_data);
@@ -598,7 +601,7 @@ ztInternal const char *_mocoGui_getTempFileName(ztGame *game)
 
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_exportFileDialog, ZT_FUNC_GUI_DIALOG_FILE_SELECTED(_mocoGuiCallback_exportFileDialog))
+ZT_FUNC_GUI_DIALOG_FILE_SELECTED(_mocoGuiCallback_exportFileDialog)
 {
 	//zt_assert(zt_fileExists(path));
 
@@ -636,7 +639,7 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_exportFileDialog, ZT_FUNC_GUI_DIAL
 
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadPanelButtonExport, ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_loadPanelButtonExport))
+ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_loadPanelButtonExport)
 {
 	ztGame *game = (ztGame*)user_data;
 
@@ -655,7 +658,7 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadPanelButtonExport, ZT_FUNC_GUI
 
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG_FILE_SELECTED(_mocoGuiCallback_loadFileDialog))
+ZT_FUNC_GUI_DIALOG_FILE_SELECTED(_mocoGuiCallback_loadFileDialog)
 {
 	zt_assert(zt_fileExists(path));
 
@@ -701,7 +704,9 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 	game->game_scene_main.animator = input.root_model->anim_controller;
 
 	if (game->game_scene_main.root_model) {
-		zt_sceneRemoveModel(game->game_scene_main.scene, game->game_scene_main.root_model);
+		if (zt_sceneHasModel(game->game_scene_main.scene, game->game_scene_main.root_model)) {
+			zt_sceneRemoveModel(game->game_scene_main.scene, game->game_scene_main.root_model);
+		}
 	}
 
 	MocoGuiToolbarData *toolbar_data = (MocoGuiToolbarData*)zt_guiItemGetUserData(game->toolbar);
@@ -785,7 +790,7 @@ ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadFileDialog, ZT_FUNC_GUI_DIALOG
 
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_loadPanelButton, ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_loadPanelButton))
+ZT_FUNC_GUI_BUTTON_PRESSED(_mocoGuiCallback_loadPanelButton)
 {
 	ztGame *game = (ztGame*)user_data;
 
@@ -845,7 +850,7 @@ ztInternal void _mocoGui_repositionToolbar(ztGame *game, ztGuiItem *toolbar)
 
 // ================================================================================================================================================================================================
 
-ZT_FUNCTION_POINTER_REGISTER(_mocoGuiCallback_toolbarResizePanelUpdate, ZT_FUNC_GUI_ITEM_UPDATE(_mocoGuiCallback_toolbarResizePanelUpdate))
+ZT_FUNC_GUI_ITEM_UPDATE(_mocoGuiCallback_toolbarResizePanelUpdate)
 {
 	ztGame *game = (ztGame*)user_data;
 

@@ -98,7 +98,7 @@ ZT_DLLEXPORT bool dll_init(ztGameDetails* details, ztGameSettings* settings, voi
 
 	game->details     = details;
 	game->settings    = settings;
-
+	settings->renderer_memory = zt_megabytes(512);
 
 	{
 		// app path and assets
@@ -131,7 +131,7 @@ ZT_DLLEXPORT bool dll_init(ztGameDetails* details, ztGameSettings* settings, voi
 	zt_debuggingInit("debug.cfg");
 
 	{
-		if (!zt_drawListMake(&game->draw_list, 1024 * 128)) {
+		if (!zt_drawListMake(&game->draw_list, 1024 * 2048)) {
 			zt_logCritical("Unable to initialize draw list");
 			return false;
 		}
@@ -328,9 +328,9 @@ ZT_DLLEXPORT void dll_cleanup(void *memory)
 	zt_shaderFree(game->shader_ao);
 
 	zt_drawListFree(&game->draw_list);
-	zt_assetManagerFree(&game->asset_manager);
 	guiThemeFree(&game->gui_theme);
 	zt_guiManagerFree(game->gui_manager);
+	zt_assetManagerFree(&game->asset_manager);
 
 	zt_free(game);
 }
@@ -456,15 +456,6 @@ ZT_DLLEXPORT bool dll_gameLoop(void *memory, r32 dt)
 		{
 #		endif
 			gui_input = zt_guiManagerHandleInput(game->gui_manager, input_keys, input_keystrokes, &input_mouse);
-			if (!gui_input) {
-				if (input_keys[ztInputKeys_Tilda].justPressed()) {
-					bool console_shown = false;
-					zt_debugConsoleToggle(&console_shown);
-					if (console_shown) {
-						zt_guiManagerSetKeyboardFocus(game->gui_manager);
-					}
-				}
-			}
 		}
 	}
 

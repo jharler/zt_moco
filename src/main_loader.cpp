@@ -269,7 +269,7 @@ void ldr_buildDll()
 // ================================================================================================================================================================================================
 
 #if defined(ZT_LOADER)
-ZT_FUNCTION_POINTER_REGISTER(ldr_buildDllConsoleCommand, ztInternal ZT_FUNC_DEBUG_CONSOLE_COMMAND(ldr_buildDllConsoleCommand))
+ZT_FUNC_CONSOLE_COMMAND(ldr_buildDllConsoleCommand)
 {
 	ldr_buildDll();
 }
@@ -324,7 +324,7 @@ bool ldr_gameInit(ztGameDetails* details, ztGameSettings* settings)
 	}
 
 #	if defined(ZT_LOADER)
-	zt_debugConsoleAddCommand("build", "Compiles the DLL", ldr_buildDllConsoleCommand_FunctionID, ztInvalidID);
+	zt_consoleAddCommand("build", "Compiles the DLL", ldr_buildDllConsoleCommand_FunctionID, ztInvalidID);
 #	endif
 
 	return true;

@@ -416,8 +416,8 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 					//return;
 
 					zt_drawListPushTransform(draw_list, model->calculated_mat * bone->mat_offset * bone->mat_model);
-					zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Red : ztColor_Cyan);
-					zt_drawListAddEmptySimpleSphere(draw_list, ztVec3::zero, .125f, 16);
+					//zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Red : ztColor_Cyan);
+					//zt_drawListAddEmptySimpleSphere(draw_list, ztVec3::zero, .125f, 16);
 
 					ztVec3 end_pos;
 
@@ -429,11 +429,11 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 					}
 
 					zt_drawListAddLine(draw_list, ztVec3::zero, end_pos);
-					zt_drawListPopColor(draw_list);
+					//zt_drawListPopColor(draw_list);
 
-					zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Purple : ztColor_Green);
-					zt_drawListAddEmptySimpleSphere(draw_list, end_pos, .05f, 8);
-					zt_drawListPopColor(draw_list);
+					//zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Purple : ztColor_Green);
+					//zt_drawListAddEmptySimpleSphere(draw_list, end_pos, .05f, 8);
+					//zt_drawListPopColor(draw_list);
 					zt_drawListPopTransform(draw_list);
 
 					//					zt_drawListPushColor(draw_list, zt_bitIsSet(bone->flags, ztBoneFlags_DebugDrawHighlight) ? ztColor_Purple : ztColor_Green);
@@ -509,7 +509,9 @@ FUNC_GAME_SCENE_RENDER(gameSceneMainRender)
 				zt_drawListPushShader(&game->draw_list, zt_shaderGetDefault(ztShaderDefault_Unlit));
 				zt_drawListPushTexture(&game->draw_list, ztTextureDefault);
 
+				zt_drawListPushColor(&game->draw_list, ztColor_Cyan);
 				Models::renderBones(&game->draw_list, gs->root_model);
+				zt_drawListPopColor(&game->draw_list);
 
 				zt_modelEditWidgetRender(&gs->model_edit_widget, &game->camera_3d, &game->draw_list);
 
